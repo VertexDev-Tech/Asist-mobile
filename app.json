@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "UBIX CONTROL",
+    "slug": "ubix-control",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0F19"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "tech.vertexdev.ubix",
+      "infoPlist": {
+        "NSCameraUsageDescription": "UBIX requiere acceso a la cámara para capturar la selfie del marcado de asistencia.",
+        "NSLocationWhenInUseUsageDescription": "UBIX requiere acceso a tu ubicación para validar la presencia dentro del radio autorizado de la empresa.",
+        "NSFaceIDUsageDescription": "UBIX utiliza FaceID para un inicio de sesión rápido y seguro."
+      }
+    },
+    "android": {
+      "package": "tech.vertexdev.ubix",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0F19"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "UBIX requiere acceso a la cámara para la verificación de asistencia."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "UBIX requiere tu ubicación para validar la presencia en la oficina."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5b831420-cf90-4010-b547-7aaa1040ffdf"
+      }
+    }
+  }
+}
