@@ -3,6 +3,7 @@ import { User } from '../types';
 
 const SESSION_KEY = 'asistio_session';
 const BIOMETRIC_CREDENTIALS_KEY = 'asistio_biometric_credentials';
+const DEVICE_ID_KEY = 'asistio_device_id';
 
 export interface SavedBiometricCreds {
   mode: 'employee' | 'admin';
@@ -52,5 +53,18 @@ export const secureStorage = {
 
   clearBiometricCredentials: async (): Promise<void> => {
     await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIALS_KEY);
+  },
+
+  // UUID fijo por instalación física, usado como device_fingerprint para el
+  // flujo anti-fraude "un dispositivo por empleado" (independiente del usuario logueado).
+  getOrCreateDeviceId: async (): Promise<string> => {
+    let id = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+    if (!id) {
+      id = 'MOBILE-' + Array.from({ length: 32 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      await SecureStore.setItemAsync(DEVICE_ID_KEY, id);
+    }
+    return id;
   },
 };

@@ -17,9 +17,10 @@ import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme/theme';
 import { dashboardApi, API_BASE_URL } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { RankingItem, TopLateItem, WeeklyStat } from '../../types';
+import { RankingItem, TopLateItem, WeeklyStat, HoursStatItem } from '../../types';
 import { SimpleBarChart } from '../../components/SimpleBarChart';
-import { Award, Clock, TrendingUp, AlertTriangle, FileSpreadsheet } from 'lucide-react-native';
+import { HoursStatsChart } from '../../components/HoursStatsChart';
+import { Award, Clock, TrendingUp, AlertTriangle, FileSpreadsheet, Timer } from 'lucide-react-native';
 
 export const AdminReportsScreen = () => {
   const { token } = useAuth();
@@ -29,6 +30,7 @@ export const AdminReportsScreen = () => {
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [topLate, setTopLate] = useState<TopLateItem[]>([]);
   const [monthlyChart, setMonthlyChart] = useState<WeeklyStat[]>([]);
+  const [hoursStats, setHoursStats] = useState<HoursStatItem[]>([]);
 
   useEffect(() => {
     loadReports();
@@ -37,14 +39,16 @@ export const AdminReportsScreen = () => {
   const loadReports = async () => {
     try {
       setLoading(true);
-      const [rData, tData, mData] = await Promise.all([
+      const [rData, tData, mData, hData] = await Promise.all([
         dashboardApi.getRanking().catch(() => []),
         dashboardApi.getTopLate().catch(() => []),
         dashboardApi.getMonthlyPunctuality().catch(() => []),
+        dashboardApi.getHoursStats().catch(() => []),
       ]);
       setRanking(rData || []);
       setTopLate(tData || []);
       setMonthlyChart(mData || []);
+      setHoursStats(hData || []);
     } catch (e) {
       console.log('Error loading reports:', e);
     } finally {
@@ -188,6 +192,17 @@ export const AdminReportsScreen = () => {
         ))
       ) : (
         <Text style={styles.emptyText}>No hay datos de ranking disponibles</Text>
+      )}
+
+      {/* Hours Stats Chart (extras vs falta) */}
+      {hoursStats.length > 0 && (
+        <>
+          <View style={styles.sectionHeader}>
+            <Timer color={theme.colors.emerald} size={18} />
+            <Text style={styles.sectionTitle}>HORAS EXTRA VS FALTA POR EMPLEADO</Text>
+          </View>
+          <HoursStatsChart data={hoursStats} />
+        </>
       )}
 
       {/* Top Late List */}

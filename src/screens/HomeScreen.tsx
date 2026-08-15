@@ -19,6 +19,8 @@ import * as Haptics from 'expo-haptics';
 import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
 import { attendanceApi } from '../services/api';
+import { secureStorage } from '../services/secureStorage';
+import { ShiftStatus } from '../types';
 import {
   MapPin,
   Clock,
@@ -27,6 +29,7 @@ import {
   Sparkles,
   X,
   Navigation,
+  ListChecks,
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -43,11 +46,16 @@ export const HomeScreen = () => {
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [isWithinZone, setIsWithinZone] = useState<boolean>(false);
   const [nextActionType, setNextActionType] = useState<'ENTRADA' | 'SALIDA'>('ENTRADA');
-  const [todayLogs, setTodayLogs] = useState<any[]>([]);
+  const [todayShifts, setTodayShifts] = useState<ShiftStatus[]>([]);
   const [successVisible, setSuccessVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const cameraRef = useRef<any>(null);
+
+  useEffect(() => {
+    secureStorage.getOrCreateDeviceId().then(setDeviceId);
+  }, []);
 
   // Live Digital Clock
   useEffect(() => {
@@ -110,7 +118,7 @@ export const HomeScreen = () => {
   const fetchTodayStatus = async () => {
     try {
       const data = await attendanceApi.getMyToday();
-      setTodayLogs(data?.shifts || []);
+      setTodayShifts(data?.shifts || []);
       if (data && data.proximo_turno && data.proximo_turno.accion) {
         setNextActionType(data.proximo_turno.accion as 'ENTRADA' | 'SALIDA');
       } else if (data && data.checkIn && !data.checkOut) {
@@ -157,7 +165,7 @@ export const HomeScreen = () => {
         type: nextActionType,
         latitude: location?.coords.latitude || -7.16233,
         longitude: location?.coords.longitude || -78.51477,
-        device_fingerprint: 'MOBILE_EXPO_DEVICE_' + (user?.id || 1),
+        device_fingerprint: deviceId || (await secureStorage.getOrCreateDeviceId()),
         selfie: base64Image,
       });
 
@@ -264,6 +272,53 @@ export const HomeScreen = () => {
           <MapPin color={theme.colors.textSecondary} size={18} />
         </TouchableOpacity>
       </MotiView>
+
+      {/* Today's Shifts Section (multi-turno) */}
+      {todayShifts.length > 0 && (
+        <MotiView
+          from={{ opacity: 0, translateY: 15 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 500, delay: 250 }}
+          style={styles.shiftsCard}
+        >
+          <View style={styles.shiftsHeader}>
+            <ListChecks color={theme.colors.cyan} size={16} />
+            <Text style={styles.shiftsTitle}>
+              MIS TURNOS DE HOY {todayShifts.length > 1 ? `(${todayShifts.length})` : ''}
+            </Text>
+          </View>
+          {todayShifts.map((shift, i) => {
+            const done = !!shift.entry && !!shift.exit;
+            const inProgress = !!shift.entry && !shift.exit;
+            const statusLabel = done ? 'Completado' : inProgress ? 'En curso' : 'Pendiente';
+            const statusColor = done
+              ? theme.colors.emerald
+              : inProgress
+              ? theme.colors.amber
+              : theme.colors.textMuted;
+            return (
+              <View key={shift.shift_id ?? i} style={styles.shiftRow}>
+                <View style={styles.shiftInfo}>
+                  <Text style={styles.shiftTimes}>
+                    Turno {shift.shift_number}: {shift.start_time} - {shift.end_time}
+                  </Text>
+                  <Text style={styles.shiftDetail}>
+                    {shift.entry
+                      ? `Entrada: ${new Date(shift.entry.timestamp).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Sin entrada'}
+                    {shift.exit
+                      ? ` | Salida: ${new Date(shift.exit.timestamp).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                  </Text>
+                </View>
+                <View style={[styles.shiftBadge, { backgroundColor: `${statusColor}22` }]}>
+                  <Text style={[styles.shiftBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </MotiView>
+      )}
 
       {/* Giant Action Button Section */}
       <MotiView
@@ -496,6 +551,55 @@ const styles = StyleSheet.create({
   },
   refreshGpsBtn: {
     padding: theme.spacing.xs,
+  },
+  shiftsCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.glassBorder,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+  },
+  shiftsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: theme.spacing.sm,
+  },
+  shiftsTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.colors.textMuted,
+    letterSpacing: 1,
+  },
+  shiftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  shiftInfo: {
+    flex: 1,
+  },
+  shiftTimes: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  shiftDetail: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  shiftBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.full,
+  },
+  shiftBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   actionSection: {
     alignItems: 'center',

@@ -6,26 +6,40 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { theme } from '../theme/theme';
 import { attendanceApi } from '../services/api';
-import { Clock, AlertTriangle, CheckCircle, Flame, UserX } from 'lucide-react-native';
+import { SimpleBarChart } from '../components/SimpleBarChart';
+import { Clock, AlertTriangle, CheckCircle, Flame, UserX, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Timer } from 'lucide-react-native';
+
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+const getYearMonth = (offset: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset);
+  return { ym: d.toISOString().slice(0, 7), year: d.getFullYear(), month: d.getMonth() };
+};
 
 export const HistoryScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [historyEntries, setHistoryEntries] = useState<any[]>([]);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [monthOffset]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const ym = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const { ym } = getYearMonth(monthOffset);
       const [sData, hData] = await Promise.all([
         attendanceApi.getMyStats().catch(() => null),
         attendanceApi.getHistory(ym, 1).catch(() => ({ entries: [] })),
@@ -40,6 +54,20 @@ export const HistoryScreen = () => {
     }
   };
 
+  const { year, month } = getYearMonth(monthOffset);
+  const monthLabel = `${MESES[month]} ${year}`;
+
+  // historyEntries viene ordenado del más reciente al más antiguo (ver backend);
+  // tomamos los 7 más recientes y los invertimos para mostrar la tendencia en orden cronológico.
+  const last7Chart = historyEntries
+    .slice(0, 7)
+    .reverse()
+    .map((e) => ({
+      day: e.fecha ? String(e.fecha).slice(-2) : '',
+      onTime: e.estado === 'tarde' ? 0 : 1,
+      late: e.estado === 'tarde' ? 1 : 0,
+    }));
+
   const renderHeader = () => (
     <View>
       <MotiView
@@ -50,6 +78,24 @@ export const HistoryScreen = () => {
         <Text style={styles.title}>Mis Marcaciones</Text>
         <Text style={styles.subtitle}>Resumen mensual y registro de asistencia UBIX</Text>
       </MotiView>
+
+      {/* Month Navigator */}
+      <View style={styles.monthNav}>
+        <TouchableOpacity
+          style={styles.monthNavBtn}
+          onPress={() => setMonthOffset((o) => o - 1)}
+        >
+          <ChevronLeft color={theme.colors.textSecondary} size={20} />
+        </TouchableOpacity>
+        <Text style={styles.monthNavLabel}>{monthLabel}</Text>
+        <TouchableOpacity
+          style={[styles.monthNavBtn, monthOffset >= 0 && styles.monthNavBtnDisabled]}
+          onPress={() => monthOffset < 0 && setMonthOffset((o) => o + 1)}
+          disabled={monthOffset >= 0}
+        >
+          <ChevronRight color={theme.colors.textSecondary} size={20} />
+        </TouchableOpacity>
+      </View>
 
       {/* Stats Grid */}
       <View style={styles.statsRow}>
@@ -86,6 +132,38 @@ export const HistoryScreen = () => {
           <Text style={styles.statLabel}>Faltas</Text>
         </MotiView>
       </View>
+
+      {/* Hours Balance Card (extras / falta / tardanza) */}
+      {stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0) && (
+        <View style={styles.balanceCard}>
+          <Text style={styles.sectionHeader}>BALANCE DE HORAS DEL MES</Text>
+          <View style={styles.balanceRow}>
+            <View style={styles.balanceItem}>
+              <TrendingUp color={theme.colors.emerald} size={18} />
+              <Text style={styles.balanceValue}>{stats.extras_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceLabel}>Extras</Text>
+            </View>
+            <View style={styles.balanceItem}>
+              <TrendingDown color={theme.colors.rose} size={18} />
+              <Text style={styles.balanceValue}>{stats.falta_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceLabel}>Falta</Text>
+            </View>
+            <View style={styles.balanceItem}>
+              <Timer color={theme.colors.amber} size={18} />
+              <Text style={styles.balanceValue}>{stats.tardanza_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceLabel}>Tardanza</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Últimos 7 días */}
+      {last7Chart.length > 0 && (
+        <>
+          <Text style={styles.sectionHeader}>ÚLTIMOS 7 DÍAS</Text>
+          <SimpleBarChart data={last7Chart} height={140} />
+        </>
+      )}
 
       <Text style={styles.sectionHeader}>HISTORIAL RECIENTE</Text>
     </View>
@@ -218,10 +296,62 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     marginTop: 2,
   },
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.glassBorder,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.sm,
+    height: 44,
+    marginBottom: theme.spacing.lg,
+  },
+  monthNavBtn: {
+    padding: 8,
+  },
+  monthNavBtnDisabled: {
+    opacity: 0.3,
+  },
+  monthNavLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    textTransform: 'capitalize',
+  },
   statsRow: {
     flexDirection: 'row',
     gap: theme.spacing.md,
     marginBottom: theme.spacing.xl,
+  },
+  balanceCard: {
+    marginBottom: theme.spacing.lg,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.glassBorder,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    ...theme.shadows.card,
+  },
+  balanceItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  balanceValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginTop: 2,
+  },
+  balanceLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
   },
   statCard: {
     flex: 1,

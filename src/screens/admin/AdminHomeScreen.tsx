@@ -11,9 +11,10 @@ import {
 import { MotiView } from 'moti';
 import { theme } from '../../theme/theme';
 import { dashboardApi, attendanceApi } from '../../services/api';
-import { DashboardKpis, WeeklyStat, AlertItem } from '../../types';
+import { DashboardKpis, WeeklyStat, AlertItem, HourlyStat } from '../../types';
 import { StatCard } from '../../components/StatCard';
-import { SimpleBarChart } from '../../components/SimpleBarChart';
+import { StackedBarChart } from '../../components/StackedBarChart';
+import { HourlyDistributionChart } from '../../components/HourlyDistributionChart';
 import {
   CheckCircle2,
   Clock,
@@ -23,6 +24,7 @@ import {
   Bell,
   Sparkles,
   Radio,
+  Activity,
 } from 'lucide-react-native';
 
 export const AdminHomeScreen = () => {
@@ -30,6 +32,7 @@ export const AdminHomeScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
+  const [hourlyStats, setHourlyStats] = useState<HourlyStat[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
 
@@ -40,14 +43,16 @@ export const AdminHomeScreen = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [kpiData, weeklyData, alertData, liveLogsData] = await Promise.all([
+      const [kpiData, weeklyData, hourlyData, alertData, liveLogsData] = await Promise.all([
         dashboardApi.getToday().catch(() => null),
         dashboardApi.getWeeklyStats().catch(() => []),
+        dashboardApi.getHourlyDistribution().catch(() => []),
         dashboardApi.getAlerts().catch(() => []),
         attendanceApi.getTodayLogs().catch(() => []),
       ]);
       setKpis(kpiData);
       setWeeklyStats(weeklyData);
+      setHourlyStats(hourlyData);
       setAlerts(alertData);
       setTodayLogs(liveLogsData);
     } catch (e) {
@@ -183,7 +188,14 @@ export const AdminHomeScreen = () => {
         <BarChart3 color={theme.colors.cyan} size={18} />
         <Text style={styles.sectionTitle}>ASISTENCIA DE LA SEMANA</Text>
       </View>
-      <SimpleBarChart data={weeklyStats} />
+      <StackedBarChart data={weeklyStats} />
+
+      {/* Hourly Distribution */}
+      <View style={styles.sectionHeader}>
+        <Activity color={theme.colors.cyan} size={18} />
+        <Text style={styles.sectionTitle}>DISTRIBUCIÓN DE MARCADOS POR HORA (HOY)</Text>
+      </View>
+      <HourlyDistributionChart data={hourlyStats} />
 
       {/* Pending Alerts Section */}
       {alerts && alerts.length > 0 && (

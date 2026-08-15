@@ -12,6 +12,11 @@ import {
   EmployeeItem,
   CompanyInfo,
   SubscriptionInfo,
+  HourlyStat,
+  HoursStatItem,
+  NotificationItem,
+  MyRanking,
+  DeviceItemFull,
 } from '../types';
 
 // ── URL de Servidor (Local vs Remoto Staging/Producción) ───────────────
@@ -104,7 +109,7 @@ export const attendanceApi = {
   },
   getHistory: async (yearMonth: string, page = 1) => {
     const res = await api.get('/attendance/history/me', {
-      params: { yearMonth, page, limit: 20 },
+      params: { month: yearMonth, page, limit: 20 },
     });
     return res.data;
   },
@@ -155,6 +160,16 @@ export const dashboardApi = {
     const res = await api.get('/dashboard/alerts');
     return res.data || [];
   },
+
+  getHourlyDistribution: async (): Promise<HourlyStat[]> => {
+    const res = await api.get('/dashboard/hourly-distribution');
+    return res.data || [];
+  },
+
+  getHoursStats: async (): Promise<HoursStatItem[]> => {
+    const res = await api.get('/dashboard/hours-stats');
+    return res.data || [];
+  },
 };
 
 export const employeesApi = {
@@ -162,12 +177,18 @@ export const employeesApi = {
     const res = await api.get('/employees');
     return res.data || [];
   },
-  create: async (data: { full_name: string; dni: string; pin: string; position?: string; schedule_id?: number }) => {
+  create: async (data: { full_name: string; dni: string; position?: string; schedule_id?: number }) => {
     const res = await api.post('/employees', data);
     return res.data;
   },
-  resetPin: async (employeeId: number, newPin: string) => {
-    const res = await api.post(`/employees/${employeeId}/reset-pin`, { pin: newPin });
+  // Fija un PIN elegido por el admin (4-6 dígitos)
+  setPin: async (employeeId: number, pin: string) => {
+    const res = await api.put(`/employees/${employeeId}/pin`, { pin });
+    return res.data;
+  },
+  // Resetea el PIN al valor por defecto (los primeros 4 dígitos del DNI) — el backend no acepta un PIN custom aquí
+  resetPinToDefault: async (employeeId: number) => {
+    const res = await api.post(`/employees/${employeeId}/reset-pin`);
     return res.data;
   },
 };
@@ -184,7 +205,7 @@ export const devicesApi = {
     const res = await api.get('/attendance/devices/pending');
     return res.data || [];
   },
-  getAuthorized: async () => {
+  getAuthorized: async (): Promise<DeviceItemFull[]> => {
     const res = await api.get('/attendance/devices/authorized');
     return res.data || [];
   },
@@ -217,8 +238,38 @@ export const companiesApi = {
 };
 
 export const reclamacionesApi = {
-  create: async (data: { tipo: string; detalle: string; contacto?: string }) => {
+  create: async (data: {
+    nombre_completo: string;
+    tipo_documento: string;
+    numero_documento: string;
+    direccion?: string;
+    telefono?: string;
+    email: string;
+    tipo: 'reclamo' | 'queja';
+    descripcion_servicio: string;
+    monto?: number;
+    descripcion_detallada: string;
+    pedido_consumidor: string;
+  }) => {
     const res = await api.post('/v1/reclamaciones', data);
+    return res.data;
+  },
+};
+
+export const notificationsApi = {
+  getMine: async (): Promise<NotificationItem[]> => {
+    const res = await api.get('/notifications/me');
+    return res.data || [];
+  },
+  markRead: async (id: number) => {
+    const res = await api.patch(`/notifications/${id}/read`);
+    return res.data;
+  },
+};
+
+export const rankingApi = {
+  getMine: async (): Promise<MyRanking> => {
+    const res = await api.get('/ranking/me');
     return res.data;
   },
 };

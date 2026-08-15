@@ -4,16 +4,21 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
-import { attendanceApi } from '../services/api';
+import { attendanceApi, rankingApi, notificationsApi } from '../services/api';
 import { MenuRow } from '../components/MenuRow';
-import { User, ShieldCheck, Smartphone, LogOut, Award, FileText } from 'lucide-react-native';
+import { MyRanking, NotificationItem } from '../types';
+import { User, ShieldCheck, Smartphone, LogOut, Award, FileText, Trophy, Bell, X } from 'lucide-react-native';
 
 export const ProfileScreen = ({ navigation }: any) => {
   const { user, logout } = useAuth();
   const [stats, setStats] = useState<any>(null);
+  const [ranking, setRanking] = useState<MyRanking | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     loadStats();
+    loadRanking();
+    loadNotifications();
   }, []);
 
   const loadStats = async () => {
@@ -22,6 +27,33 @@ export const ProfileScreen = ({ navigation }: any) => {
       setStats(data);
     } catch (e) {
       console.log('Error loading profile stats:', e);
+    }
+  };
+
+  const loadRanking = async () => {
+    try {
+      const data = await rankingApi.getMine();
+      setRanking(data);
+    } catch (e) {
+      console.log('Error loading ranking:', e);
+    }
+  };
+
+  const loadNotifications = async () => {
+    try {
+      const data = await notificationsApi.getMine();
+      setNotifications(data);
+    } catch (e) {
+      console.log('Error loading notifications:', e);
+    }
+  };
+
+  const handleMarkRead = async (id: number) => {
+    try {
+      await notificationsApi.markRead(id);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } catch (e) {
+      console.log('Error marking notification read:', e);
     }
   };
 
@@ -73,12 +105,73 @@ export const ProfileScreen = ({ navigation }: any) => {
         </LinearGradient>
       </MotiView>
 
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <>
+          <Text style={styles.sectionHeader}>NOTIFICACIONES</Text>
+          <View style={styles.infoGroup}>
+            {notifications.map((n, i) => (
+              <View
+                key={n.id}
+                style={[styles.notifRow, i === notifications.length - 1 && { borderBottomWidth: 0 }]}
+              >
+                <View style={styles.rowIcon}>
+                  <Bell color={theme.colors.amber} size={18} />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowValue}>{n.message}</Text>
+                  <Text style={styles.rowLabel}>
+                    {new Date(n.sentAt).toLocaleString('es-PE')}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => handleMarkRead(n.id)} style={styles.notifDismiss}>
+                  <X color={theme.colors.textMuted} size={16} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* My Ranking */}
+      {ranking && (
+        <>
+          <Text style={styles.sectionHeader}>MI RANKING DE PUNTUALIDAD</Text>
+          <MotiView
+            from={{ opacity: 0, translateY: 15 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 450, delay: 150 }}
+            style={styles.rankingCard}
+          >
+            <View style={styles.rankingBadge}>
+              <Trophy color={theme.colors.amber} size={22} />
+              <Text style={styles.rankingPosition}>
+                {ranking.position ? `#${ranking.position}` : '—'}
+              </Text>
+            </View>
+            <View style={styles.rankingInfo}>
+              <Text style={styles.rowValue}>
+                {ranking.position
+                  ? `Puesto ${ranking.position} de ${ranking.totalEmployees}`
+                  : 'Aún sin posición este mes'}
+              </Text>
+              <Text style={styles.rowLabel}>
+                {ranking.onTime} puntuales · {ranking.late} tardanzas · {ranking.missed} faltas
+              </Text>
+            </View>
+            <View style={styles.rankingScorePill}>
+              <Text style={styles.rankingScoreText}>{Math.round(ranking.score)}</Text>
+            </View>
+          </MotiView>
+        </>
+      )}
+
       {/* Employee Options Menu */}
       <Text style={styles.sectionHeader}>OPCIONES DE COLABORADOR</Text>
       <View style={styles.menuGroup}>
         <MenuRow
           title="Libro de Reclamaciones"
-          subtitle="Enviar justificaciones de tardanza o incidencias a RRHH"
+          subtitle="Conforme a la Ley 29571 de Protección al Consumidor"
           icon={<FileText color={theme.colors.cyan} size={20} />}
           onPress={() => navigation.navigate('Reclamaciones')}
         />
@@ -240,6 +333,52 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textPrimary,
     marginTop: 2,
+  },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  notifDismiss: {
+    padding: 8,
+  },
+  rankingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.glassBorder,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.card,
+  },
+  rankingBadge: {
+    alignItems: 'center',
+    marginRight: theme.spacing.md,
+    width: 48,
+  },
+  rankingPosition: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    marginTop: 2,
+  },
+  rankingInfo: {
+    flex: 1,
+  },
+  rankingScorePill: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.full,
+  },
+  rankingScoreText: {
+    color: theme.colors.emerald,
+    fontSize: 14,
+    fontWeight: '800',
   },
   logoutBtn: {
     flexDirection: 'row',

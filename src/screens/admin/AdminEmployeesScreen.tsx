@@ -30,7 +30,6 @@ export const AdminEmployeesScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
   const [dni, setDni] = useState('');
-  const [pin, setPin] = useState('');
   const [position, setPosition] = useState('');
 
   useEffect(() => {
@@ -51,9 +50,9 @@ export const AdminEmployeesScreen = () => {
   };
 
   const handleCreateEmployee = async () => {
-    if (!fullName.trim() || !dni.trim() || !pin.trim()) {
+    if (!fullName.trim() || !dni.trim()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Campos requeridos', 'Ingresa nombre, DNI y un PIN de 6 dígitos.');
+      Alert.alert('Campos requeridos', 'Ingresa nombre y DNI del empleado.');
       return;
     }
 
@@ -63,15 +62,16 @@ export const AdminEmployeesScreen = () => {
       await employeesApi.create({
         full_name: fullName.trim(),
         dni: dni.trim(),
-        pin: pin.trim(),
         position: position.trim() || 'Colaborador',
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('¡Empleado Registrado! 🎉', `Empleado ${fullName} fue agregado con éxito.`);
+      Alert.alert(
+        '¡Empleado Registrado! 🎉',
+        `${fullName} fue agregado con éxito. Su PIN inicial es "${dni.trim().slice(0, 4)}" (los primeros 4 dígitos del DNI).`,
+      );
       setModalVisible(false);
       setFullName('');
       setDni('');
-      setPin('');
       setPosition('');
       loadEmployees();
     } catch (error: any) {
@@ -83,17 +83,17 @@ export const AdminEmployeesScreen = () => {
     }
   };
 
-  const handleResetPin = (item: EmployeeItem) => {
+  const handleSetCustomPin = (item: EmployeeItem) => {
     Alert.prompt(
-      'Reiniciar PIN',
-      `Ingresa el nuevo PIN de 6 dígitos para ${item.full_name}:`,
+      'Fijar PIN personalizado',
+      `Ingresa el nuevo PIN (4-6 dígitos) para ${item.full_name}:`,
       async (newPin) => {
-        if (!newPin || newPin.trim().length < 4) {
-          Alert.alert('PIN inválido', 'El PIN debe tener al menos 4 dígitos.');
+        if (!newPin || !/^\d{4,6}$/.test(newPin.trim())) {
+          Alert.alert('PIN inválido', 'El PIN debe tener entre 4 y 6 dígitos numéricos.');
           return;
         }
         try {
-          await employeesApi.resetPin(item.id, newPin.trim());
+          await employeesApi.setPin(item.id, newPin.trim());
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Alert.alert('Éxito', `El PIN de ${item.full_name} fue actualizado.`);
         } catch (e) {
@@ -104,6 +104,31 @@ export const AdminEmployeesScreen = () => {
       'plain-text',
       '',
       'number-pad',
+    );
+  };
+
+  const handleResetPin = (item: EmployeeItem) => {
+    const defaultPin = item.dni ? item.dni.slice(0, 4) : '0000';
+    Alert.alert(
+      'Restablecer PIN',
+      `¿Qué deseas hacer con el PIN de ${item.full_name}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: `Resetear a "${defaultPin}" (por defecto)`,
+          onPress: async () => {
+            try {
+              await employeesApi.resetPinToDefault(item.id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Éxito', `El PIN de ${item.full_name} fue restablecido a "${defaultPin}".`);
+            } catch (e) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Error', 'No se pudo restablecer el PIN.');
+            }
+          },
+        },
+        { text: 'Fijar PIN personalizado...', onPress: () => handleSetCustomPin(item) },
+      ],
     );
   };
 
@@ -258,16 +283,9 @@ export const AdminEmployeesScreen = () => {
               maxLength={12}
             />
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="PIN de Seguridad (ej: 123456)"
-              placeholderTextColor={theme.colors.textMuted}
-              keyboardType="number-pad"
-              secureTextEntry
-              value={pin}
-              onChangeText={setPin}
-              maxLength={8}
-            />
+            <Text style={styles.pinHint}>
+              El PIN inicial será los primeros 4 dígitos del DNI ingresado.
+            </Text>
 
             <TextInput
               style={styles.modalInput}
@@ -446,6 +464,12 @@ const styles = StyleSheet.create({
     height: 50,
     color: theme.colors.textPrimary,
     fontSize: 14,
+    marginBottom: theme.spacing.md,
+  },
+  pinHint: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: -8,
     marginBottom: theme.spacing.md,
   },
   submitModalBtn: {

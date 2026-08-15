@@ -134,6 +134,7 @@ export interface CompanyInfo {
   ruc: string;
   sector: string;
   phone: string;
+  systemConfig?: SystemConfig | null;
   subscription_status?: {
     is_expired: boolean;
     plan: string;
@@ -148,4 +149,69 @@ export interface SubscriptionInfo {
   status?: string;
   current_period_end?: string | null;
   [key: string]: unknown;
+}
+
+export interface HourlyStat {
+  hour: string;
+  count: number;
+}
+
+export interface HoursStatItem {
+  employee_name: string;
+  extras: number;
+  falta: number;
+}
+
+export interface MyHoursStats {
+  extras: number;
+  falta: number;
+  tardanza: number;
+  extras_fmt: string;
+  falta_fmt: string;
+  tardanza_fmt: string;
+  onTime: number;
+  late: number;
+  missed: number;
+}
+
+export interface ShiftStatus {
+  shift_id: number | null;
+  shift_number: number;
+  start_time: string;
+  end_time: string;
+  entry: { timestamp: string; is_late?: boolean } | null;
+  exit: { timestamp: string } | null;
+}
+
+export interface NotificationItem {
+  id: number;
+  type: string;
+  message: string;
+  sentAt: string;
+  isRead: boolean;
+}
+
+export interface MyRanking {
+  position: number | null;
+  employeeId?: number;
+  name?: string;
+  positionName?: string | null;
+  dni?: string;
+  score: number;
+  onTime: number;
+  late: number;
+  missed: number;
+  totalEmployees: number;
+  lastCalculated?: string;
+}
+
+export interface DeviceItemFull {
+  id: number;
+  employee_id: number;
+  fingerprint: string;
+  platform?: string | null;
+  authorized: boolean;
+  authorized_at?: string | null;
+  created_at: string;
+  employee?: { full_name: string; dni: string } | null;
 }

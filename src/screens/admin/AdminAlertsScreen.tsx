@@ -12,13 +12,14 @@ import {
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme/theme';
-import { attendanceApi } from '../../services/api';
-import { AlertTriangle, CheckCircle, Bell, ShieldAlert } from 'lucide-react-native';
+import { attendanceApi, alertsApi } from '../../services/api';
+import { AlertTriangle, CheckCircle, Bell, ShieldAlert, Check } from 'lucide-react-native';
 
 export const AdminAlertsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [alertsList, setAlertsList] = useState<any[]>([]);
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadAlerts();
@@ -28,12 +29,27 @@ export const AdminAlertsScreen = () => {
     try {
       setLoading(true);
       const data = await attendanceApi.getAlerts();
-      setAlertsList(data || []);
+      setAlertsList((data || []).filter((a: any) => !a.reviewed));
     } catch (e) {
       console.log('Error loading alerts:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleReview = async (alertId: number) => {
+    try {
+      setReviewingId(alertId);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await alertsApi.review(alertId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setAlertsList((prev) => prev.filter((a) => a.id !== alertId));
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', 'No se pudo marcar la alerta como revisada.');
+    } finally {
+      setReviewingId(null);
     }
   };
 
@@ -89,6 +105,14 @@ export const AdminAlertsScreen = () => {
                   : 'Reciente'}
               </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.reviewBtn}
+              onPress={() => handleReview(alertItem.id)}
+              disabled={reviewingId === alertItem.id}
+            >
+              <Check color={theme.colors.emerald} size={18} />
+            </TouchableOpacity>
           </MotiView>
         ))
       ) : (
@@ -163,6 +187,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: theme.colors.textMuted,
     marginTop: 4,
+  },
+  reviewBtn: {
+    padding: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderRadius: theme.borderRadius.md,
   },
   emptyContainer: {
     padding: theme.spacing.xxl,
