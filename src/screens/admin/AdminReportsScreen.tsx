@@ -245,6 +245,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
+    paddingBottom: 110,
   },
   centerContainer: {
     flex: 1,

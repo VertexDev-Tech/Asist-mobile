@@ -41,11 +41,11 @@ export const HistoryScreen = () => {
       setLoading(true);
       const { ym } = getYearMonth(monthOffset);
       const [sData, hData] = await Promise.all([
-        attendanceApi.getMyStats().catch(() => null),
+        attendanceApi.getMyStats(ym).catch(() => null),
         attendanceApi.getHistory(ym, 1).catch(() => ({ entries: [] })),
       ]);
       setStats(sData);
-      setHistoryEntries(hData?.entries || hData || []);
+      setHistoryEntries(hData?.entries || (Array.isArray(hData) ? hData : []));
     } catch (e) {
       console.log('Error loading history:', e);
     } finally {
@@ -57,16 +57,98 @@ export const HistoryScreen = () => {
   const { year, month } = getYearMonth(monthOffset);
   const monthLabel = `${MESES[month]} ${year}`;
 
+  const derivedStats = React.useMemo(() => {
+    if (Array.isArray(historyEntries) && historyEntries.length > 0) {
+      let onTime = 0;
+      let late = 0;
+      let missed = 0;
+
+      historyEntries.forEach((e) => {
+        const estado = (e.estado || '').toLowerCase();
+        if (estado === 'tarde' || e.is_late) {
+          late++;
+        } else if (estado === 'ausente') {
+          missed++;
+        } else {
+          onTime++;
+        }
+      });
+
+      return {
+        onTime,
+        late,
+        missed,
+        extras_fmt: stats?.extras_fmt || '0h 00m',
+        falta_fmt: stats?.falta_fmt || '0h 00m',
+        tardanza_fmt: stats?.tardanza_fmt || '0h 00m',
+        hasBalance: Boolean(stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0)),
+      };
+    }
+
+    return {
+      onTime: stats?.onTime || 0,
+      late: stats?.late || 0,
+      missed: stats?.missed || 0,
+      extras_fmt: stats?.extras_fmt || '0h 00m',
+      falta_fmt: stats?.falta_fmt || '0h 00m',
+      tardanza_fmt: stats?.tardanza_fmt || '0h 00m',
+      hasBalance: Boolean(stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0)),
+    };
+  }, [historyEntries, stats]);
+
   // historyEntries viene ordenado del más reciente al más antiguo (ver backend);
   // tomamos los 7 más recientes y los invertimos para mostrar la tendencia en orden cronológico.
   const last7Chart = historyEntries
     .slice(0, 7)
     .reverse()
-    .map((e) => ({
-      day: e.fecha ? String(e.fecha).slice(-2) : '',
-      onTime: e.estado === 'tarde' ? 0 : 1,
-      late: e.estado === 'tarde' ? 1 : 0,
-    }));
+    .map((e) => {
+      const estado = (e.estado || '').toLowerCase();
+      const isLate = estado === 'tarde' || e.is_late;
+      const isAbsent = estado === 'ausente';
+      const isOnTime = !isLate && !isAbsent;
+
+      let dayLabel = e.fecha ? String(e.fecha).slice(-2) : '';
+      if (e.fecha) {
+        const parts = String(e.fecha).split('-');
+        if (parts.length === 3) {
+          const dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          const days = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+          dayLabel = days[dateObj.getDay()];
+        }
+      }
+
+      let heightPercent = 0.55;
+      let positionOffset = 0.2;
+
+      if (e.horaEntrada && e.horaSalida) {
+        const [h1, m1] = e.horaEntrada.split(':').map(Number);
+        const [h2, m2] = e.horaSalida.split(':').map(Number);
+        if (!isNaN(h1) && !isNaN(h2)) {
+          const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+          const hours = Math.max(1, mins / 60);
+          heightPercent = Math.min(0.9, Math.max(0.35, hours / 12));
+          positionOffset = 0.75;
+        }
+      } else if (isLate) {
+        heightPercent = 0.28;
+        positionOffset = 0.25;
+      } else if (isAbsent) {
+        heightPercent = 0.15;
+        positionOffset = 0.5;
+      } else if (e.horaEntrada) {
+        heightPercent = 0.45;
+        positionOffset = 0.15;
+      }
+
+      return {
+        day: dayLabel,
+        onTime: isOnTime ? 1 : 0,
+        late: isLate ? 1 : 0,
+        absent: isAbsent ? 1 : 0,
+        heightPercent,
+        positionOffset,
+      };
+    });
 
   const renderHeader = () => (
     <View>
@@ -106,7 +188,7 @@ export const HistoryScreen = () => {
           style={styles.statCard}
         >
           <Clock color={theme.colors.emerald} size={22} />
-          <Text style={styles.statNumber}>{stats?.onTime || 0}</Text>
+          <Text style={styles.statNumber}>{derivedStats.onTime}</Text>
           <Text style={styles.statLabel}>Puntuales</Text>
         </MotiView>
 
@@ -117,7 +199,7 @@ export const HistoryScreen = () => {
           style={styles.statCard}
         >
           <AlertTriangle color={theme.colors.amber} size={22} />
-          <Text style={styles.statNumber}>{stats?.late || 0}</Text>
+          <Text style={styles.statNumber}>{derivedStats.late}</Text>
           <Text style={styles.statLabel}>Tardanzas</Text>
         </MotiView>
 
@@ -128,29 +210,29 @@ export const HistoryScreen = () => {
           style={styles.statCard}
         >
           <Flame color={theme.colors.cyan} size={22} />
-          <Text style={styles.statNumber}>{stats?.missed || 0}</Text>
+          <Text style={styles.statNumber}>{derivedStats.missed}</Text>
           <Text style={styles.statLabel}>Faltas</Text>
         </MotiView>
       </View>
 
       {/* Hours Balance Card (extras / falta / tardanza) */}
-      {stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0) && (
+      {derivedStats.hasBalance && (
         <View style={styles.balanceCard}>
           <Text style={styles.sectionHeader}>BALANCE DE HORAS DEL MES</Text>
           <View style={styles.balanceRow}>
             <View style={styles.balanceItem}>
               <TrendingUp color={theme.colors.emerald} size={18} />
-              <Text style={styles.balanceValue}>{stats.extras_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceValue}>{derivedStats.extras_fmt}</Text>
               <Text style={styles.balanceLabel}>Extras</Text>
             </View>
             <View style={styles.balanceItem}>
               <TrendingDown color={theme.colors.rose} size={18} />
-              <Text style={styles.balanceValue}>{stats.falta_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceValue}>{derivedStats.falta_fmt}</Text>
               <Text style={styles.balanceLabel}>Falta</Text>
             </View>
             <View style={styles.balanceItem}>
               <Timer color={theme.colors.amber} size={18} />
-              <Text style={styles.balanceValue}>{stats.tardanza_fmt || '0h 00m'}</Text>
+              <Text style={styles.balanceValue}>{derivedStats.tardanza_fmt}</Text>
               <Text style={styles.balanceLabel}>Tardanza</Text>
             </View>
           </View>
@@ -278,6 +360,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
+    paddingBottom: 110,
   },
   centerContainer: {
     flex: 1,

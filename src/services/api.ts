@@ -103,8 +103,10 @@ export const attendanceApi = {
     const res = await api.get('/attendance/today/me');
     return res.data;
   },
-  getMyStats: async () => {
-    const res = await api.get('/attendance/my-hours-stats');
+  getMyStats: async (month?: string) => {
+    const res = await api.get('/attendance/my-hours-stats', {
+      params: month ? { month } : undefined,
+    });
     return res.data;
   },
   getHistory: async (yearMonth: string, page = 1) => {

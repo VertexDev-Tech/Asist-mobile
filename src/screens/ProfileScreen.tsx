@@ -23,8 +23,31 @@ export const ProfileScreen = ({ navigation }: any) => {
 
   const loadStats = async () => {
     try {
-      const data = await attendanceApi.getMyStats();
-      setStats(data);
+      const ym = new Date().toISOString().slice(0, 7);
+      const [sData, hData] = await Promise.all([
+        attendanceApi.getMyStats(ym).catch(() => null),
+        attendanceApi.getHistory(ym, 1).catch(() => ({ entries: [] })),
+      ]);
+      const entries = hData?.entries || (Array.isArray(hData) ? hData : []);
+      if (entries.length > 0) {
+        let onTime = 0;
+        let late = 0;
+        let missed = 0;
+        entries.forEach((e: any) => {
+          const estado = (e.estado || '').toLowerCase();
+          if (estado === 'tarde' || e.is_late) late++;
+          else if (estado === 'ausente') missed++;
+          else onTime++;
+        });
+        setStats({
+          ...(sData || {}),
+          onTime,
+          late,
+          missed,
+        });
+      } else {
+        setStats(sData);
+      }
     } catch (e) {
       console.log('Error loading profile stats:', e);
     }
@@ -238,6 +261,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
+    paddingBottom: 110,
   },
   title: {
     fontSize: 26,
@@ -391,7 +415,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     paddingVertical: theme.spacing.md,
     marginTop: theme.spacing.xl,
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
   logoutText: {
     color: theme.colors.rose,

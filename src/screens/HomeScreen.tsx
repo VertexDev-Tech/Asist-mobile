@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { attendanceApi } from '../services/api';
 import { secureStorage } from '../services/secureStorage';
 import { ShiftStatus } from '../types';
+import { startGeofenceMonitoring, stopGeofenceMonitoring } from '../services/geofenceTask';
 import {
   MapPin,
   Clock,
@@ -82,9 +83,9 @@ export const HomeScreen = () => {
       setLocation(loc);
 
       // Office coordinates from user config or fallback
-      const officeLat = user?.systemConfig?.office_latitude ?? -7.16233;
-      const officeLng = user?.systemConfig?.office_longitude ?? -78.51477;
-      const radiusM = user?.systemConfig?.geofence_radius_m ?? 150;
+      const officeLat = Number(user?.systemConfig?.office_latitude ?? -7.16233);
+      const officeLng = Number(user?.systemConfig?.office_longitude ?? -78.51477);
+      const radiusM = Number(user?.systemConfig?.geofence_radius_m ?? 150);
 
       // Distance calculation in meters (Haversine formula)
       const d = calculateDistance(
@@ -119,12 +120,24 @@ export const HomeScreen = () => {
     try {
       const data = await attendanceApi.getMyToday();
       setTodayShifts(data?.shifts || []);
+      
+      const officeLat = Number(user?.systemConfig?.office_latitude ?? -7.16233);
+      const officeLng = Number(user?.systemConfig?.office_longitude ?? -78.51477);
+      const radiusM = Number(user?.systemConfig?.geofence_radius_m ?? 150);
+
+      let nextType: 'ENTRADA' | 'SALIDA' = 'ENTRADA';
       if (data && data.proximo_turno && data.proximo_turno.accion) {
-        setNextActionType(data.proximo_turno.accion as 'ENTRADA' | 'SALIDA');
+        nextType = data.proximo_turno.accion as 'ENTRADA' | 'SALIDA';
       } else if (data && data.checkIn && !data.checkOut) {
-        setNextActionType('SALIDA');
+        nextType = 'SALIDA';
+      }
+      setNextActionType(nextType);
+
+      // Si la siguiente acción es SALIDA (está laborando), aseguramos que el geofence esté activo
+      if (nextType === 'SALIDA') {
+        startGeofenceMonitoring(officeLat, officeLng, radiusM);
       } else {
-        setNextActionType('ENTRADA');
+        stopGeofenceMonitoring();
       }
     } catch (e) {
       console.log('Today logs error:', e);
@@ -147,11 +160,12 @@ export const HomeScreen = () => {
     if (!cameraRef.current || isSubmitting) return;
 
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsSubmitting(true);
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.6,
         base64: true,
+        shutterSound: false,
       });
 
       if (!photo || !photo.base64) {
@@ -173,6 +187,18 @@ export const HomeScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSuccessMessage(result.message || `Has registrado tu ${nextActionType} exitosamente.`);
       setSuccessVisible(true);
+
+      const officeLat = Number(user?.systemConfig?.office_latitude ?? -7.16233);
+      const officeLng = Number(user?.systemConfig?.office_longitude ?? -78.51477);
+      const radiusM = Number(user?.systemConfig?.geofence_radius_m ?? 150);
+
+      // Gestor de Geofencing en vivo al marcar
+      if (nextActionType === 'ENTRADA') {
+        startGeofenceMonitoring(officeLat, officeLng, radiusM);
+      } else {
+        stopGeofenceMonitoring();
+      }
+
       fetchTodayStatus();
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -440,6 +466,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
+    paddingBottom: 110,
   },
   userCard: {
     flexDirection: 'row',

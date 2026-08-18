@@ -21,9 +21,11 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-local-authentication": "~17.0.8",
     "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
     "expo-secure-store": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-status-bar": "~3.0.9",
+    "expo-task-manager": "~14.0.9",
     "lottie-react-native": "~7.3.1",
     "lucide-react-native": "^0.395.0",
     "moti": "^0.29.0",
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.0",
     "@types/react": "~19.1.10",
+    "eas-cli": "^22.0.0",
     "typescript": "^5.3.3"
   },
   "private": true
