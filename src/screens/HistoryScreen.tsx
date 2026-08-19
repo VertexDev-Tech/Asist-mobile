@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,318 +6,381 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
 } from 'react-native';
 import { MotiView } from 'moti';
-import { theme } from '../theme/theme';
+import { Theme } from '../theme/theme';
+import { useTheme } from '../context/ThemeContext';
 import { attendanceApi } from '../services/api';
-import { SimpleBarChart } from '../components/SimpleBarChart';
-import { Clock, AlertTriangle, CheckCircle, Flame, UserX, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Timer } from 'lucide-react-native';
 
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
+import { Clock, AlertTriangle, Flame } from 'lucide-react-native';
 
-const getYearMonth = (offset: number) => {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset);
-  return { ym: d.toISOString().slice(0, 7), year: d.getFullYear(), month: d.getMonth() };
-};
+const DAYS_SHORT = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+const DAYS_SINGLE = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
 
 export const HistoryScreen = () => {
+  const { theme, isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<any>(null);
-  const [historyEntries, setHistoryEntries] = useState<any[]>([]);
-  const [monthOffset, setMonthOffset] = useState(0);
+  const [historyData, setHistoryData] = useState<any>(null);
+  const [hoursStats, setHoursStats] = useState<any>(null);
+
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   useEffect(() => {
     loadData();
-  }, [monthOffset]);
+  }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const { ym } = getYearMonth(monthOffset);
-      const [sData, hData] = await Promise.all([
-        attendanceApi.getMyStats(ym).catch(() => null),
-        attendanceApi.getHistory(ym, 1).catch(() => ({ entries: [] })),
+      const [hData, hsData] = await Promise.all([
+        attendanceApi.getHistory().catch(() => null),
+        attendanceApi.getMyStats().catch(() => null),
       ]);
-      setStats(sData);
-      setHistoryEntries(hData?.entries || (Array.isArray(hData) ? hData : []));
+      setHistoryData(hData);
+      setHoursStats(hsData);
     } catch (e) {
-      console.log('Error loading history:', e);
+      console.log('Error loading history data:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const { year, month } = getYearMonth(monthOffset);
-  const monthLabel = `${MESES[month]} ${year}`;
+  const records = useMemo(() => {
+    if (!historyData) return [];
+    return Array.isArray(historyData)
+      ? historyData
+      : historyData.entries || historyData.data || historyData.records || [];
+  }, [historyData]);
 
-  const derivedStats = React.useMemo(() => {
-    if (Array.isArray(historyEntries) && historyEntries.length > 0) {
-      let onTime = 0;
-      let late = 0;
-      let missed = 0;
+  // Cálculos para el gráfico de los últimos 7 días idéntico a la web
+  const chartBars = useMemo(() => {
+    if (!records || records.length === 0) return [];
+    const sliceData = records.slice(0, 7).reverse();
 
-      historyEntries.forEach((e) => {
-        const estado = (e.estado || '').toLowerCase();
-        if (estado === 'tarde' || e.is_late) {
-          late++;
-        } else if (estado === 'ausente') {
-          missed++;
-        } else {
-          onTime++;
-        }
-      });
+    const MIN_H = 6;
+    const MAX_H = 22;
+    const RANGE = MAX_H - MIN_H;
 
-      return {
-        onTime,
-        late,
-        missed,
-        extras_fmt: stats?.extras_fmt || '0h 00m',
-        falta_fmt: stats?.falta_fmt || '0h 00m',
-        tardanza_fmt: stats?.tardanza_fmt || '0h 00m',
-        hasBalance: Boolean(stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0)),
-      };
-    }
+    return sliceData.map((r: any, idx: number) => {
+      let h1 = 0;
+      let h2 = 0;
+      let expH1 = 0;
+      let expH2 = 0;
 
-    return {
-      onTime: stats?.onTime || 0,
-      late: stats?.late || 0,
-      missed: stats?.missed || 0,
-      extras_fmt: stats?.extras_fmt || '0h 00m',
-      falta_fmt: stats?.falta_fmt || '0h 00m',
-      tardanza_fmt: stats?.tardanza_fmt || '0h 00m',
-      hasBalance: Boolean(stats && (stats.extras > 0 || stats.falta > 0 || stats.tardanza > 0)),
-    };
-  }, [historyEntries, stats]);
+      if (r.horaEsperadaEntrada) {
+        const [h, m] = r.horaEsperadaEntrada.split(':').map(Number);
+        expH1 = (h || 0) + (m || 0) / 60;
+      }
+      if (r.horaEsperadaSalida) {
+        const [h, m] = r.horaEsperadaSalida.split(':').map(Number);
+        expH2 = (h || 0) + (m || 0) / 60;
+      }
 
-  // historyEntries viene ordenado del más reciente al más antiguo (ver backend);
-  // tomamos los 7 más recientes y los invertimos para mostrar la tendencia en orden cronológico.
-  const last7Chart = historyEntries
-    .slice(0, 7)
-    .reverse()
-    .map((e) => {
-      const estado = (e.estado || '').toLowerCase();
-      const isLate = estado === 'tarde' || e.is_late;
-      const isAbsent = estado === 'ausente';
-      const isOnTime = !isLate && !isAbsent;
+      if (r.horaEntrada) {
+        const [h, m] = r.horaEntrada.split(':').map(Number);
+        h1 = (h || 0) + (m || 0) / 60;
+      }
+      if (r.horaSalida) {
+        const [h, m] = r.horaSalida.split(':').map(Number);
+        h2 = (h || 0) + (m || 0) / 60;
+      }
 
-      let dayLabel = e.fecha ? String(e.fecha).slice(-2) : '';
-      if (e.fecha) {
-        const parts = String(e.fecha).split('-');
-        if (parts.length === 3) {
-          const dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          const days = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
-          dayLabel = days[dateObj.getDay()];
+      let topPct = 0;
+      let heightPct = 0;
+      let expTopPct = 0;
+      let expHeightPct = 0;
+
+      if (expH1 > 0 && expH2 > 0) {
+        const startY = Math.max(0, ((expH1 - MIN_H) / RANGE) * 100);
+        const endY = Math.min(100, ((expH2 - MIN_H) / RANGE) * 100);
+        expTopPct = startY;
+        expHeightPct = Math.max(2, endY - startY);
+      }
+
+      if (h1 > 0 && h2 > 0) {
+        const startY = Math.max(0, ((h1 - MIN_H) / RANGE) * 100);
+        const endY = Math.min(100, ((h2 - MIN_H) / RANGE) * 100);
+        topPct = startY;
+        heightPct = Math.max(3, endY - startY);
+      } else if (h1 > 0) {
+        const startY = Math.max(0, ((h1 - MIN_H) / RANGE) * 100);
+        topPct = startY;
+        heightPct = 12; // Barra pequeña si no hay salida
+      }
+
+      let dayLetter = '—';
+      if (r.fecha) {
+        const [yy, mm, dd] = String(r.fecha).split('-');
+        if (yy && mm && dd) {
+          const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+          dayLetter = DAYS_SINGLE[d.getDay()] || '—';
         }
       }
 
-      let heightPercent = 0.55;
-      let positionOffset = 0.2;
-
-      if (e.horaEntrada && e.horaSalida) {
-        const [h1, m1] = e.horaEntrada.split(':').map(Number);
-        const [h2, m2] = e.horaSalida.split(':').map(Number);
-        if (!isNaN(h1) && !isNaN(h2)) {
-          const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
-          const hours = Math.max(1, mins / 60);
-          heightPercent = Math.min(0.9, Math.max(0.35, hours / 12));
-          positionOffset = 0.75;
-        }
-      } else if (isLate) {
-        heightPercent = 0.28;
-        positionOffset = 0.25;
-      } else if (isAbsent) {
-        heightPercent = 0.15;
-        positionOffset = 0.5;
-      } else if (e.horaEntrada) {
-        heightPercent = 0.45;
-        positionOffset = 0.15;
-      }
+      const isLate = r.estado === 'tarde';
+      const isAbsent = !r.horaEntrada;
 
       return {
-        day: dayLabel,
-        onTime: isOnTime ? 1 : 0,
-        late: isLate ? 1 : 0,
-        absent: isAbsent ? 1 : 0,
-        heightPercent,
-        positionOffset,
+        id: idx,
+        dayLetter,
+        expTopPct,
+        expHeightPct,
+        topPct,
+        heightPct,
+        isLate,
+        isAbsent,
       };
     });
+  }, [records]);
+
+  // Cálculos para las barras de progreso del Balance de Horas
+  const maxBalance = Math.max(
+    Number(hoursStats?.extras || 0),
+    Number(hoursStats?.falta || 0),
+    Number(hoursStats?.tardanza || 0),
+    0.01,
+  );
+  const extrasPct = Math.min(100, Math.round(((hoursStats?.extras || 0) / maxBalance) * 100));
+  const faltaPct = Math.min(100, Math.round(((hoursStats?.falta || 0) / maxBalance) * 100));
+  const tardanzaPct = Math.min(100, Math.round(((hoursStats?.tardanza || 0) / maxBalance) * 100));
 
   const renderHeader = () => (
     <View>
+      {/* Title & Subtitle */}
       <MotiView
-        from={{ opacity: 0, translateY: -15 }}
+        from={{ opacity: 0, translateY: -10 }}
         animate={{ opacity: 1, translateY: 0 }}
         transition={{ type: 'timing', duration: 400 }}
       >
-        <Text style={styles.title}>Mis Marcaciones</Text>
-        <Text style={styles.subtitle}>Resumen mensual y registro de asistencia UBIX</Text>
+        <Text style={styles.title}>Mi Historial</Text>
+        <Text style={styles.subtitle}>Últimos 30 días</Text>
       </MotiView>
 
-      {/* Month Navigator */}
-      <View style={styles.monthNav}>
-        <TouchableOpacity
-          style={styles.monthNavBtn}
-          onPress={() => setMonthOffset((o) => o - 1)}
-        >
-          <ChevronLeft color={theme.colors.textSecondary} size={20} />
-        </TouchableOpacity>
-        <Text style={styles.monthNavLabel}>{monthLabel}</Text>
-        <TouchableOpacity
-          style={[styles.monthNavBtn, monthOffset >= 0 && styles.monthNavBtnDisabled]}
-          onPress={() => monthOffset < 0 && setMonthOffset((o) => o + 1)}
-          disabled={monthOffset >= 0}
-        >
-          <ChevronRight color={theme.colors.textSecondary} size={20} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Stats Grid */}
+      {/* Top 3 KPI Stats Grid with Icons */}
       <View style={styles.statsRow}>
         <MotiView
-          from={{ opacity: 0, scale: 0.9 }}
+          from={{ opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'timing', duration: 350, delay: 50 }}
+          style={styles.statCard}
+        >
+          <Clock color={theme.colors.cyan} size={22} style={styles.statIcon} />
+          <Text style={[styles.statNumber, { color: theme.colors.cyan }]}>
+            {historyData?.onTime ?? '—'}
+          </Text>
+          <Text style={styles.statLabel}>PUNTUALES</Text>
+        </MotiView>
+
+        <MotiView
+          from={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'timing', duration: 350, delay: 100 }}
           style={styles.statCard}
         >
-          <Clock color={theme.colors.emerald} size={22} />
-          <Text style={styles.statNumber}>{derivedStats.onTime}</Text>
-          <Text style={styles.statLabel}>Puntuales</Text>
+          <AlertTriangle color={theme.colors.orange} size={22} style={styles.statIcon} />
+          <Text style={[styles.statNumber, { color: theme.colors.orange }]}>
+            {historyData?.late ?? '—'}
+          </Text>
+          <Text style={styles.statLabel}>TARDANZAS</Text>
         </MotiView>
 
         <MotiView
-          from={{ opacity: 0, scale: 0.9 }}
+          from={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'timing', duration: 350, delay: 200 }}
+          transition={{ type: 'timing', duration: 350, delay: 150 }}
           style={styles.statCard}
         >
-          <AlertTriangle color={theme.colors.amber} size={22} />
-          <Text style={styles.statNumber}>{derivedStats.late}</Text>
-          <Text style={styles.statLabel}>Tardanzas</Text>
-        </MotiView>
-
-        <MotiView
-          from={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'timing', duration: 350, delay: 300 }}
-          style={styles.statCard}
-        >
-          <Flame color={theme.colors.cyan} size={22} />
-          <Text style={styles.statNumber}>{derivedStats.missed}</Text>
-          <Text style={styles.statLabel}>Faltas</Text>
+          <Flame color={theme.colors.textMuted} size={22} style={styles.statIcon} />
+          <Text style={[styles.statNumber, { color: theme.colors.textMuted }]}>
+            {historyData?.missed ?? 0}
+          </Text>
+          <Text style={styles.statLabel}>FALTAS</Text>
         </MotiView>
       </View>
 
-      {/* Hours Balance Card (extras / falta / tardanza) */}
-      {derivedStats.hasBalance && (
-        <View style={styles.balanceCard}>
-          <Text style={styles.sectionHeader}>BALANCE DE HORAS DEL MES</Text>
-          <View style={styles.balanceRow}>
-            <View style={styles.balanceItem}>
-              <TrendingUp color={theme.colors.emerald} size={18} />
-              <Text style={styles.balanceValue}>{derivedStats.extras_fmt}</Text>
-              <Text style={styles.balanceLabel}>Extras</Text>
+      {/* Gráfico Semanal "Últimos 7 días" */}
+      <MotiView
+        from={{ opacity: 0, translateY: 10 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 400, delay: 200 }}
+        style={styles.chartCard}
+      >
+        <Text style={styles.chartTitle}>Últimos 7 días</Text>
+        <View style={styles.chartContainer}>
+          {chartBars.map((bar: any) => (
+            <View key={bar.id} style={styles.chartCol}>
+              <View style={styles.barTrack}>
+                {/* Expected schedule background bar */}
+                {bar.expHeightPct > 0 && (
+                  <View
+                    style={[
+                      styles.barExpected,
+                      {
+                        top: `${bar.expTopPct}%`,
+                        height: `${bar.expHeightPct}%`,
+                      },
+                    ]}
+                  />
+                )}
+                {/* Actual worked bar */}
+                {!bar.isAbsent && bar.heightPct > 0 && (
+                  <View
+                    style={[
+                      styles.barActual,
+                      {
+                        top: `${bar.topPct}%`,
+                        height: `${bar.heightPct}%`,
+                        backgroundColor: bar.isLate ? theme.colors.orange : theme.colors.cyan,
+                      },
+                    ]}
+                  />
+                )}
+              </View>
+              <Text style={styles.chartDayLabel}>{bar.dayLetter}</Text>
             </View>
-            <View style={styles.balanceItem}>
-              <TrendingDown color={theme.colors.rose} size={18} />
-              <Text style={styles.balanceValue}>{derivedStats.falta_fmt}</Text>
-              <Text style={styles.balanceLabel}>Falta</Text>
-            </View>
-            <View style={styles.balanceItem}>
-              <Timer color={theme.colors.amber} size={18} />
-              <Text style={styles.balanceValue}>{derivedStats.tardanza_fmt}</Text>
-              <Text style={styles.balanceLabel}>Tardanza</Text>
-            </View>
+          ))}
+        </View>
+      </MotiView>
+
+      {/* Balance de Horas del Mes Actual */}
+      <MotiView
+        from={{ opacity: 0, translateY: 10 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 400, delay: 250 }}
+        style={styles.balanceCard}
+      >
+        <Text style={styles.balanceTitle}>📅 BALANCE DEL MES ACTUAL</Text>
+
+        {/* Horas Extras */}
+        <View style={styles.balanceRow}>
+          <View style={styles.balanceMeta}>
+            <Text style={styles.balanceLabel}>⬆️ Horas Extras</Text>
+            <Text style={styles.balanceValue}>{hoursStats?.extras_fmt || '0h 00m'}</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: theme.colors.emerald,
+                  width: `${hoursStats?.extras ? Math.max(6, extrasPct) : 0}%`,
+                },
+              ]}
+            />
           </View>
         </View>
-      )}
 
-      {/* Últimos 7 días */}
-      {last7Chart.length > 0 && (
-        <>
-          <Text style={styles.sectionHeader}>ÚLTIMOS 7 DÍAS</Text>
-          <SimpleBarChart data={last7Chart} height={140} />
-        </>
-      )}
+        {/* Horas Falta */}
+        <View style={styles.balanceRow}>
+          <View style={styles.balanceMeta}>
+            <Text style={styles.balanceLabel}>⬇️ Horas Falta</Text>
+            <Text style={styles.balanceValue}>{hoursStats?.falta_fmt || '0h 00m'}</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: theme.colors.rose,
+                  width: `${hoursStats?.falta ? Math.max(6, faltaPct) : 0}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
 
-      <Text style={styles.sectionHeader}>HISTORIAL RECIENTE</Text>
+        {/* Tardanzas */}
+        <View style={[styles.balanceRow, { marginBottom: 0 }]}>
+          <View style={styles.balanceMeta}>
+            <Text style={styles.balanceLabel}>⏰ Tardanzas</Text>
+            <Text style={styles.balanceValue}>{hoursStats?.tardanza_fmt || '0h 00m'}</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: theme.colors.orange,
+                  width: `${hoursStats?.tardanza ? Math.max(6, tardanzaPct) : 0}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
+      </MotiView>
     </View>
   );
 
   const renderItem = ({ item, index }: { item: any; index: number }) => {
-    // Determine format: Formatted entry { fecha, horaEntrada, horaSalida, estado } vs Raw log { timestamp, type, is_late }
-    let dateStr = '---';
-    let timeStr = '---';
-    let estado = item.estado || 'puntual';
-    let isLate = estado === 'tarde' || item.is_late;
-    let isAusente = estado === 'ausente';
+    const checkIn = item.horaEntrada || null;
+    const checkOut = item.horaSalida || null;
+    const isLate = item.estado === 'tarde';
+    const noMark = !checkIn;
 
+    let dayNum = '—';
+    let dayName = '—';
     if (item.fecha) {
-      // Formatted Entry
-      dateStr = item.fecha;
-      timeStr = item.horaEntrada
-        ? `Entrada: ${item.horaEntrada}${item.horaSalida ? ' | Salida: ' + item.horaSalida : ''}`
-        : 'Sin marcado';
-    } else if (item.timestamp) {
-      // Raw log
-      const dateObj = new Date(item.timestamp);
-      if (!isNaN(dateObj.getTime())) {
-        dateStr = dateObj.toLocaleDateString('es-PE', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        });
-        timeStr = dateObj.toLocaleTimeString('es-PE', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        });
+      const [yy, mm, dd] = String(item.fecha).split('-');
+      if (yy && mm && dd) {
+        const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+        dayNum = String(d.getDate());
+        dayName = DAYS_SHORT[d.getDay()] || '—';
       }
+    }
+
+    // Badge styling matching the web app
+    let badgeText = '✅ A tiempo';
+    let badgeBg = isDark ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7';
+    let badgeTextColor = isDark ? theme.colors.emerald : '#166534';
+
+    if (noMark) {
+      badgeText = 'Sin marcar';
+      badgeBg = isDark ? 'rgba(255, 255, 255, 0.08)' : '#F3F4F6';
+      badgeTextColor = isDark ? theme.colors.textMuted : '#6B7280';
+    } else if (isLate) {
+      badgeText = '⏰ Tarde';
+      badgeBg = isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7';
+      badgeTextColor = isDark ? theme.colors.orange : '#92400E';
+    } else if (!checkOut) {
+      badgeText = '🟡 Incompleto';
+      badgeBg = isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7';
+      badgeTextColor = isDark ? theme.colors.orange : '#92400E';
     }
 
     return (
       <MotiView
-        from={{ opacity: 0, translateX: -15 }}
-        animate={{ opacity: 1, translateX: 0 }}
-        transition={{ type: 'timing', duration: 350, delay: index * 40 }}
-        style={styles.logCard}
+        from={{ opacity: 0, translateY: 8 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 300, delay: index * 25 }}
+        style={styles.histRow}
       >
-        <View
-          style={[
-            styles.typeBadge,
-            {
-              backgroundColor: isAusente
-                ? 'rgba(239, 68, 68, 0.15)'
-                : isLate
-                ? 'rgba(245, 158, 11, 0.15)'
-                : 'rgba(16, 185, 129, 0.15)',
-            },
-          ]}
-        >
-          {isAusente ? (
-            <UserX color={theme.colors.rose} size={20} />
-          ) : isLate ? (
-            <AlertTriangle color={theme.colors.amber} size={20} />
-          ) : (
-            <CheckCircle color={theme.colors.emerald} size={20} />
-          )}
+        {/* Date Box */}
+        <View style={styles.dateBox}>
+          <Text style={styles.dayNum}>{dayNum}</Text>
+          <Text style={styles.dayName}>{dayName}</Text>
         </View>
 
-        <View style={styles.logContent}>
-          <Text style={styles.logType}>
-            {isAusente ? 'AUSENCIA' : isLate ? 'TARDANZA' : 'PUNTUAL'}
-          </Text>
-          <Text style={styles.logDate}>{dateStr}</Text>
+        {/* Times Breakdown */}
+        <View style={styles.timesCol}>
+          <View style={styles.timeLine}>
+            <View style={[styles.dot, { backgroundColor: '#10B981' }]} />
+            <Text style={styles.timeLabel}>Entrada: </Text>
+            <Text style={styles.timeValue}>{checkIn || '—'}</Text>
+          </View>
+
+          <View style={styles.timeLine}>
+            <View style={[styles.dot, { backgroundColor: '#EF4444' }]} />
+            <Text style={styles.timeLabel}>Salida: </Text>
+            <Text style={styles.timeValue}>{checkOut || '—'}</Text>
+          </View>
         </View>
 
-        <Text style={styles.logTime}>{timeStr}</Text>
+        {/* Status Badge */}
+        <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+          <Text style={[styles.badgeText, { color: badgeTextColor }]}>{badgeText}</Text>
+        </View>
       </MotiView>
     );
   };
@@ -334,10 +397,15 @@ export const HistoryScreen = () => {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.listContent}
-      data={historyEntries}
+      data={records}
       keyExtractor={(item, index) => String(item.id || item.fecha || index)}
       ListHeaderComponent={renderHeader}
       renderItem={renderItem}
+      ListEmptyComponent={
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Sin registros de marcación en este período.</Text>
+        </View>
+      }
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -352,153 +420,242 @@ export const HistoryScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  listContent: {
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: 110,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.lg,
-    marginTop: 2,
-  },
-  monthNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.sm,
-    height: 44,
-    marginBottom: theme.spacing.lg,
-  },
-  monthNavBtn: {
-    padding: 8,
-  },
-  monthNavBtnDisabled: {
-    opacity: 0.3,
-  },
-  monthNavLabel: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    textTransform: 'capitalize',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl,
-  },
-  balanceCard: {
-    marginBottom: theme.spacing.lg,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
-    ...theme.shadows.card,
-  },
-  balanceItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  balanceValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    marginTop: 2,
-  },
-  balanceLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
-    alignItems: 'center',
-    ...theme.shadows.card,
-  },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    marginTop: 6,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-    marginTop: 2,
-  },
-  sectionHeader: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.textMuted,
-    letterSpacing: 1,
-    marginBottom: theme.spacing.md,
-  },
-  logCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  typeBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  logContent: {
-    flex: 1,
-  },
-  logType: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  logDate: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  logTime: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.cyan,
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    listContent: {
+      padding: theme.spacing.lg,
+      paddingTop: theme.spacing.xl,
+      paddingBottom: theme.spacing.xxl,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.lg,
+      marginTop: 2,
+    },
+
+    // KPI Stats Row
+    statsRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      paddingVertical: 18,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...theme.shadows.card,
+    },
+    statIcon: {
+      marginBottom: 6,
+    },
+    statNumber: {
+      fontSize: 26,
+      fontWeight: '900',
+    },
+    statLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      marginTop: 4,
+      letterSpacing: 0.5,
+    },
+
+    // Chart Card
+    chartCard: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    chartTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+      marginBottom: 16,
+    },
+    chartContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'stretch',
+      height: 120,
+      gap: 8,
+    },
+    chartCol: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    barTrack: {
+      flex: 1,
+      width: '100%',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9',
+      borderRadius: 6,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    barExpected: {
+      position: 'absolute',
+      width: '100%',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      borderRadius: 4,
+    },
+    barActual: {
+      position: 'absolute',
+      width: '100%',
+      borderRadius: 4,
+      opacity: 0.9,
+      zIndex: 2,
+    },
+    chartDayLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      marginTop: 8,
+      textAlign: 'center',
+    },
+
+    // Balance Card
+    balanceCard: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    balanceTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+      letterSpacing: 0.8,
+      marginBottom: theme.spacing.md,
+    },
+    balanceRow: {
+      marginBottom: 14,
+    },
+    balanceMeta: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    balanceLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    balanceValue: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+    },
+    progressTrack: {
+      height: 8,
+      borderRadius: 100,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F3F4F6',
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      borderRadius: 100,
+    },
+
+    // Historial Rows (Matching PWA .hist-row)
+    histRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: theme.spacing.sm,
+      gap: 12,
+      ...theme.shadows.card,
+    },
+    dateBox: {
+      alignItems: 'center',
+      minWidth: 38,
+    },
+    dayNum: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+      lineHeight: 24,
+    },
+    dayName: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    timesCol: {
+      flex: 1,
+      gap: 2,
+    },
+    timeLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    dot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      marginRight: 6,
+    },
+    timeLabel: {
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    timeValue: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    badge: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+    },
+    badgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    emptyContainer: {
+      padding: theme.spacing.xl,
+      alignItems: 'center',
+    },
+    emptyText: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+    },
+  });

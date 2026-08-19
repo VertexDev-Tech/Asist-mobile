@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
-import { theme } from '../theme/theme';
+import { Theme } from '../theme/theme';
+import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
   ShieldCheck,
@@ -23,10 +24,14 @@ import {
   User as UserIcon,
   Building2,
   Mail,
+  Sun,
+  Moon,
+  ArrowRight,
 } from 'lucide-react-native';
 
 export const LoginScreen = () => {
   const [activeTab, setActiveTab] = useState<'employee' | 'admin'>('employee');
+  const { theme, isDark, toggleTheme } = useTheme();
 
   // Employee Form State
   const [dni, setDni] = useState('');
@@ -45,6 +50,8 @@ export const LoginScreen = () => {
     isBiometricAvailable,
     hasSavedBiometrics,
   } = useAuth();
+
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   const handleTabSwitch = (tab: 'employee' | 'admin') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -134,10 +141,26 @@ export const LoginScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Top Right Quick Theme Toggle */}
+        <TouchableOpacity
+          style={styles.topThemeToggle}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            toggleTheme();
+          }}
+          activeOpacity={0.7}
+        >
+          {isDark ? (
+            <Sun color="#FBBF24" size={20} />
+          ) : (
+            <Moon color={theme.colors.cyan} size={20} />
+          )}
+        </TouchableOpacity>
+
         {/* Background Gradient Bubble */}
         <View style={styles.topGradientBubble}>
           <LinearGradient
-            colors={[theme.colors.primary, theme.colors.violet] as const}
+            colors={[theme.colors.cyan, theme.colors.violet] as const}
             style={styles.gradientFill}
           />
         </View>
@@ -151,14 +174,16 @@ export const LoginScreen = () => {
         >
           <View style={styles.logoBadge}>
             <LinearGradient
-              colors={theme.colors.gradients.primary}
+              colors={theme.colors.gradients.cyan}
               style={styles.logoIconGradient}
             >
               <ShieldCheck color="#FFF" size={36} />
             </LinearGradient>
           </View>
-          <Text style={styles.brandTitle}>UBIX<Text style={{ color: theme.colors.cyan }}>CONTROL</Text></Text>
-          <Text style={styles.brandSubtitle}>Control de Asistencia Móvil</Text>
+          <Text style={styles.brandTitle}>
+            UBIX<Text style={{ color: theme.colors.cyan }}>CONTROL</Text>
+          </Text>
+          <Text style={styles.brandSubtitle}>Control de Asistencia Inteligente</Text>
         </MotiView>
 
         {/* Mode Selector Tabs (Empleado / Administrador) */}
@@ -278,7 +303,7 @@ export const LoginScreen = () => {
             </>
           )}
 
-          {/* Submit Button */}
+          {/* Login Submit Button in Turquoise / Cyan */}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleLogin}
@@ -286,15 +311,20 @@ export const LoginScreen = () => {
             style={styles.loginBtnWrapper}
           >
             <LinearGradient
-              colors={theme.colors.gradients.primary}
+              colors={theme.colors.gradients.cyan}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.loginBtn}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.loginBtnText}>
-                  {activeTab === 'employee' ? 'INGRESAR COMO EMPLEADO' : 'INGRESAR COMO ADMIN'}
-                </Text>
+                <View style={styles.loginBtnContent}>
+                  <Text style={styles.loginBtnText}>
+                    {activeTab === 'employee' ? 'INGRESAR COMO EMPLEADO' : 'INGRESAR COMO ADMIN'}
+                  </Text>
+                  <ArrowRight color="#FFF" size={18} />
+                </View>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -316,163 +346,177 @@ export const LoginScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: theme.spacing.lg,
-  },
-  topGradientBubble: {
-    position: 'absolute',
-    top: -100,
-    right: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    opacity: 0.25,
-    overflow: 'hidden',
-  },
-  gradientFill: {
-    flex: 1,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  logoBadge: {
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.borderRadius.xl,
-    padding: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  logoIconGradient: {
-    width: 68,
-    height: 68,
-    borderRadius: theme.borderRadius.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  brandTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    letterSpacing: 2,
-  },
-  brandSubtitle: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-  },
-  tabBarContainer: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.lg,
-    padding: 4,
-    marginBottom: theme.spacing.lg,
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-  },
-  tabButtonActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-  },
-  tabTextActive: {
-    color: '#FFF',
-  },
-  card: {
-    backgroundColor: theme.colors.glass,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
-    ...theme.shadows.card,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.lg,
-    marginTop: 4,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.md,
-    height: 54,
-    marginBottom: theme.spacing.md,
-  },
-  inputIcon: {
-    marginRight: theme.spacing.sm,
-  },
-  input: {
-    flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-  },
-  loginBtnWrapper: {
-    marginTop: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-    ...theme.shadows.glowPrimary,
-  },
-  loginBtn: {
-    height: 54,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loginBtnText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  biometricBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    gap: 8,
-  },
-  biometricIconWrapper: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  biometricPulse: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-  },
-  biometricBtnText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      padding: theme.spacing.lg,
+      paddingTop: 50,
+      paddingBottom: 40,
+    },
+    topThemeToggle: {
+      position: 'absolute',
+      top: 50,
+      right: 24,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.glassBorder,
+      zIndex: 10,
+    },
+    topGradientBubble: {
+      position: 'absolute',
+      top: -100,
+      right: -80,
+      width: 280,
+      height: 280,
+      borderRadius: 140,
+      opacity: isDark ? 0.22 : 0.1,
+      overflow: 'hidden',
+    },
+    gradientFill: {
+      flex: 1,
+    },
+    header: {
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    logoBadge: {
+      marginBottom: theme.spacing.md,
+      borderRadius: theme.borderRadius.xl,
+      padding: 3,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.04)',
+    },
+    logoIconGradient: {
+      width: 68,
+      height: 68,
+      borderRadius: theme.borderRadius.lg,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    brandTitle: {
+      fontSize: 32,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+      letterSpacing: 2,
+    },
+    brandSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+    },
+    tabBarContainer: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.lg,
+      padding: 4,
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    tabButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.md,
+    },
+    tabButtonActive: {
+      backgroundColor: theme.colors.cyan,
+    },
+    tabText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+    },
+    tabTextActive: {
+      color: '#FFF',
+    },
+    card: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.xl,
+      ...theme.shadows.card,
+    },
+    cardTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    cardSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+      marginBottom: theme.spacing.lg,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? theme.colors.surfaceHover : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 52,
+      marginBottom: theme.spacing.md,
+    },
+    inputIcon: {
+      marginRight: theme.spacing.sm,
+    },
+    input: {
+      flex: 1,
+      color: theme.colors.textPrimary,
+      fontSize: 15,
+    },
+    loginBtnWrapper: {
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      marginTop: theme.spacing.md,
+      ...theme.shadows.glowPrimary,
+    },
+    loginBtn: {
+      height: 54,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+    },
+    loginBtnContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    loginBtnText: {
+      color: '#FFF',
+      fontSize: 14,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+    },
+    biometricBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: theme.spacing.lg,
+      paddingVertical: 10,
+    },
+    biometricBtnText: {
+      color: theme.colors.cyan,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+  });

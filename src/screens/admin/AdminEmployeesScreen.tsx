@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,12 +14,14 @@ import {
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { theme } from '../../theme/theme';
+import { Theme } from '../../theme/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { employeesApi } from '../../services/api';
 import { EmployeeItem } from '../../types';
-import { Search, UserCheck, UserX, UserPlus, Mail, Lock, X, RefreshCw } from 'lucide-react-native';
+import { Search, UserCheck, UserX, UserPlus, X, RefreshCw } from 'lucide-react-native';
 
 export const AdminEmployeesScreen = () => {
+  const { theme, isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -30,7 +32,10 @@ export const AdminEmployeesScreen = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
   const [dni, setDni] = useState('');
+  const [pin, setPin] = useState('');
   const [position, setPosition] = useState('');
+
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   useEffect(() => {
     loadEmployees();
@@ -50,9 +55,9 @@ export const AdminEmployeesScreen = () => {
   };
 
   const handleCreateEmployee = async () => {
-    if (!fullName.trim() || !dni.trim()) {
+    if (!fullName.trim() || !dni.trim() || !pin.trim()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Campos requeridos', 'Ingresa nombre y DNI del empleado.');
+      Alert.alert('Campos requeridos', 'Ingresa nombre, DNI y un PIN de 6 dígitos.');
       return;
     }
 
@@ -62,16 +67,15 @@ export const AdminEmployeesScreen = () => {
       await employeesApi.create({
         full_name: fullName.trim(),
         dni: dni.trim(),
+        pin: pin.trim(),
         position: position.trim() || 'Colaborador',
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        '¡Empleado Registrado! 🎉',
-        `${fullName} fue agregado con éxito. Su PIN inicial es "${dni.trim().slice(0, 4)}" (los primeros 4 dígitos del DNI).`,
-      );
+      Alert.alert('¡Empleado Registrado! 🎉', `Empleado ${fullName} fue agregado con éxito.`);
       setModalVisible(false);
       setFullName('');
       setDni('');
+      setPin('');
       setPosition('');
       loadEmployees();
     } catch (error: any) {
@@ -83,17 +87,17 @@ export const AdminEmployeesScreen = () => {
     }
   };
 
-  const handleSetCustomPin = (item: EmployeeItem) => {
+  const handleResetPin = (item: EmployeeItem) => {
     Alert.prompt(
-      'Fijar PIN personalizado',
-      `Ingresa el nuevo PIN (4-6 dígitos) para ${item.full_name}:`,
+      'Reiniciar PIN',
+      `Ingresa el nuevo PIN de 6 dígitos para ${item.full_name}:`,
       async (newPin) => {
-        if (!newPin || !/^\d{4,6}$/.test(newPin.trim())) {
-          Alert.alert('PIN inválido', 'El PIN debe tener entre 4 y 6 dígitos numéricos.');
+        if (!newPin || newPin.trim().length < 4) {
+          Alert.alert('PIN inválido', 'El PIN debe tener al menos 4 dígitos.');
           return;
         }
         try {
-          await employeesApi.setPin(item.id, newPin.trim());
+          await employeesApi.resetPin(item.id, newPin.trim());
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           Alert.alert('Éxito', `El PIN de ${item.full_name} fue actualizado.`);
         } catch (e) {
@@ -101,43 +105,15 @@ export const AdminEmployeesScreen = () => {
           Alert.alert('Error', 'No se pudo actualizar el PIN.');
         }
       },
-      'plain-text',
-      '',
-      'number-pad',
-    );
-  };
-
-  const handleResetPin = (item: EmployeeItem) => {
-    const defaultPin = item.dni ? item.dni.slice(0, 4) : '0000';
-    Alert.alert(
-      'Restablecer PIN',
-      `¿Qué deseas hacer con el PIN de ${item.full_name}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: `Resetear a "${defaultPin}" (por defecto)`,
-          onPress: async () => {
-            try {
-              await employeesApi.resetPinToDefault(item.id);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('Éxito', `El PIN de ${item.full_name} fue restablecido a "${defaultPin}".`);
-            } catch (e) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              Alert.alert('Error', 'No se pudo restablecer el PIN.');
-            }
-          },
-        },
-        { text: 'Fijar PIN personalizado...', onPress: () => handleSetCustomPin(item) },
-      ],
     );
   };
 
   const filteredEmployees = employees.filter((e) => {
     const q = search.toLowerCase();
     return (
-      e.full_name?.toLowerCase().includes(q) ||
-      e.dni?.toLowerCase().includes(q) ||
-      e.position?.toLowerCase().includes(q)
+      (e.full_name && e.full_name.toLowerCase().includes(q)) ||
+      (e.dni && e.dni.includes(q)) ||
+      (e.position && e.position.toLowerCase().includes(q))
     );
   });
 
@@ -145,27 +121,25 @@ export const AdminEmployeesScreen = () => {
     <View>
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.title}>Directorio de Empleados</Text>
-          <Text style={styles.subtitle}>Gestión de colaboradores UBIX</Text>
+          <Text style={styles.title}>Colaboradores</Text>
+          <Text style={styles.subtitle}>Gestión de personal y accesos</Text>
         </View>
         <TouchableOpacity
-          style={styles.addBtnWrapper}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setModalVisible(true);
-          }}
+          style={styles.addBtn}
+          onPress={() => setModalVisible(true)}
+          activeOpacity={0.8}
         >
           <LinearGradient
             colors={theme.colors.gradients.cyan}
-            style={styles.addBtn}
+            style={styles.addBtnGradient}
           >
-            <UserPlus color="#050A14" size={18} />
+            <UserPlus color="#FFF" size={18} />
             <Text style={styles.addBtnText}>NUEVO</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
 
-      {/* Search Input */}
+      {/* Search Filter Input */}
       <View style={styles.searchContainer}>
         <Search color={theme.colors.textMuted} size={18} style={styles.searchIcon} />
         <TextInput
@@ -179,51 +153,57 @@ export const AdminEmployeesScreen = () => {
     </View>
   );
 
-  const renderItem = ({ item, index }: { item: EmployeeItem; index: number }) => (
-    <MotiView
-      from={{ opacity: 0, translateY: 10 }}
-      animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: 350, delay: index * 40 }}
-      style={styles.employeeCard}
-    >
-      <View style={styles.avatarCircle}>
-        <Text style={styles.avatarText}>
-          {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'E'}
-        </Text>
-      </View>
+  const renderItem = ({ item, index }: { item: EmployeeItem; index: number }) => {
+    const isActive = item.active !== false;
 
-      <View style={styles.employeeInfo}>
-        <Text style={styles.employeeName}>{item.full_name}</Text>
-        <Text style={styles.employeeDetails}>
-          DNI: {item.dni} | {item.position || 'Colaborador'}
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={styles.resetPinBtn}
-        onPress={() => handleResetPin(item)}
+    return (
+      <MotiView
+        from={{ opacity: 0, translateY: 10 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: 350, delay: index * 30 }}
+        style={styles.employeeCard}
       >
-        <RefreshCw color={theme.colors.cyan} size={16} />
-      </TouchableOpacity>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>
+            {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'E'}
+          </Text>
+        </View>
 
-      <View
-        style={[
-          styles.statusBadge,
-          {
-            backgroundColor: item.active
-              ? 'rgba(16, 185, 129, 0.15)'
-              : 'rgba(244, 63, 94, 0.15)',
-          },
-        ]}
-      >
-        {item.active ? (
-          <UserCheck color={theme.colors.emerald} size={16} />
-        ) : (
-          <UserX color={theme.colors.rose} size={16} />
-        )}
-      </View>
-    </MotiView>
-  );
+        <View style={styles.employeeInfo}>
+          <Text style={styles.employeeName}>{item.full_name}</Text>
+          <Text style={styles.employeeDetails}>
+            DNI: {item.dni} | {item.position || 'Colaborador'}
+          </Text>
+        </View>
+
+        {/* Actions */}
+        <TouchableOpacity
+          style={styles.resetPinBtn}
+          onPress={() => handleResetPin(item)}
+          activeOpacity={0.7}
+        >
+          <RefreshCw color={theme.colors.cyan} size={18} />
+        </TouchableOpacity>
+
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: isActive
+                ? 'rgba(16, 185, 129, 0.15)'
+                : 'rgba(239, 68, 68, 0.15)',
+            },
+          ]}
+        >
+          {isActive ? (
+            <UserCheck color={theme.colors.emerald} size={18} />
+          ) : (
+            <UserX color={theme.colors.rose} size={18} />
+          )}
+        </View>
+      </MotiView>
+    );
+  };
 
   if (loading && !refreshing) {
     return (
@@ -234,12 +214,11 @@ export const AdminEmployeesScreen = () => {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <FlatList
-        style={styles.container}
-        contentContainerStyle={styles.listContent}
         data={filteredEmployees}
         keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.listContent}
         ListHeaderComponent={renderHeader}
         renderItem={renderItem}
         refreshControl={
@@ -254,12 +233,12 @@ export const AdminEmployeesScreen = () => {
         }
       />
 
-      {/* New Employee Modal */}
+      {/* Create Employee Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Registrar Nuevo Empleado</Text>
+              <Text style={styles.modalTitle}>Nuevo Colaborador</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <X color={theme.colors.textMuted} size={22} />
               </TouchableOpacity>
@@ -267,7 +246,7 @@ export const AdminEmployeesScreen = () => {
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Nombre Completo"
+              placeholder="Nombre completo"
               placeholderTextColor={theme.colors.textMuted}
               value={fullName}
               onChangeText={setFullName}
@@ -283,9 +262,15 @@ export const AdminEmployeesScreen = () => {
               maxLength={12}
             />
 
-            <Text style={styles.pinHint}>
-              El PIN inicial será los primeros 4 dígitos del DNI ingresado.
-            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="PIN de Acceso (ej: 123456)"
+              placeholderTextColor={theme.colors.textMuted}
+              keyboardType="number-pad"
+              value={pin}
+              onChangeText={setPin}
+              maxLength={8}
+            />
 
             <TextInput
               style={styles.modalInput}
@@ -299,15 +284,16 @@ export const AdminEmployeesScreen = () => {
               style={styles.submitModalBtn}
               onPress={handleCreateEmployee}
               disabled={isSubmitting}
+              activeOpacity={0.85}
             >
               <LinearGradient
                 colors={theme.colors.gradients.cyan}
                 style={styles.submitModalGradient}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#050A14" />
+                  <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.submitModalText}>REGISTRAR EN UBIX</Text>
+                  <Text style={styles.submitModalText}>REGISTRAR EMPLEADO</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -318,175 +304,176 @@ export const AdminEmployeesScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  listContent: {
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: 110,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  addBtnWrapper: {
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  addBtnText: {
-    color: '#050A14',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.md,
-    height: 48,
-    marginBottom: theme.spacing.lg,
-  },
-  searchIcon: {
-    marginRight: theme.spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-  },
-  employeeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.cyan,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  avatarText: {
-    color: '#050A14',
-    fontWeight: '800',
-    fontSize: 18,
-  },
-  employeeInfo: {
-    flex: 1,
-  },
-  employeeName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  employeeDetails: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  resetPinBtn: {
-    padding: 8,
-    marginRight: 6,
-  },
-  statusBadge: {
-    padding: 8,
-    borderRadius: theme.borderRadius.full,
-  },
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    listContent: {
+      padding: theme.spacing.lg,
+      paddingTop: theme.spacing.xl,
+      paddingBottom: theme.spacing.xxl,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    addBtn: {
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      ...theme.shadows.glowPrimary,
+    },
+    addBtnGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    addBtnText: {
+      color: '#FFF',
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+    },
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 48,
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    searchIcon: {
+      marginRight: theme.spacing.sm,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.colors.textPrimary,
+      fontSize: 14,
+    },
+    employeeCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      ...theme.shadows.card,
+    },
+    avatarCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.colors.cyan,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: theme.spacing.md,
+    },
+    avatarText: {
+      color: '#FFF',
+      fontWeight: '800',
+      fontSize: 18,
+    },
+    employeeInfo: {
+      flex: 1,
+    },
+    employeeName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    employeeDetails: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    resetPinBtn: {
+      padding: 8,
+      marginRight: 6,
+    },
+    statusBadge: {
+      padding: 8,
+      borderRadius: theme.borderRadius.full,
+    },
 
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: theme.spacing.lg,
-  },
-  modalCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  modalInput: {
-    backgroundColor: theme.colors.background,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: theme.spacing.md,
-    height: 50,
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    marginBottom: theme.spacing.md,
-  },
-  pinHint: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    marginTop: -8,
-    marginBottom: theme.spacing.md,
-  },
-  submitModalBtn: {
-    marginTop: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-  },
-  submitModalGradient: {
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  submitModalText: {
-    color: '#050A14',
-    fontWeight: '800',
-    fontSize: 14,
-    letterSpacing: 1,
-  },
-});
+    // Modal Styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'center',
+      padding: theme.spacing.lg,
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.xl,
+      ...theme.shadows.card,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    modalInput: {
+      backgroundColor: isDark ? theme.colors.surfaceHover : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 50,
+      color: theme.colors.textPrimary,
+      fontSize: 14,
+      marginBottom: theme.spacing.md,
+    },
+    submitModalBtn: {
+      marginTop: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      ...theme.shadows.glowPrimary,
+    },
+    submitModalGradient: {
+      height: 50,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    submitModalText: {
+      color: '#FFF',
+      fontWeight: '800',
+      fontSize: 14,
+      letterSpacing: 1,
+    },
+  });

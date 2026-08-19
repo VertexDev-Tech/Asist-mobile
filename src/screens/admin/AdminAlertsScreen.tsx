@@ -1,25 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { MotiView } from 'moti';
-import * as Haptics from 'expo-haptics';
-import { theme } from '../../theme/theme';
-import { attendanceApi, alertsApi } from '../../services/api';
-import { AlertTriangle, CheckCircle, Bell, ShieldAlert, Check } from 'lucide-react-native';
+import { Theme } from '../../theme/theme';
+import { useTheme } from '../../context/ThemeContext';
+import { attendanceApi } from '../../services/api';
+import { AlertTriangle, CheckCircle } from 'lucide-react-native';
 
 export const AdminAlertsScreen = () => {
+  const { theme, isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [alertsList, setAlertsList] = useState<any[]>([]);
-  const [reviewingId, setReviewingId] = useState<number | null>(null);
+
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   useEffect(() => {
     loadAlerts();
@@ -29,27 +29,12 @@ export const AdminAlertsScreen = () => {
     try {
       setLoading(true);
       const data = await attendanceApi.getAlerts();
-      setAlertsList((data || []).filter((a: any) => !a.reviewed));
+      setAlertsList(data || []);
     } catch (e) {
       console.log('Error loading alerts:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const handleReview = async (alertId: number) => {
-    try {
-      setReviewingId(alertId);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await alertsApi.review(alertId);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setAlertsList((prev) => prev.filter((a) => a.id !== alertId));
-    } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error', 'No se pudo marcar la alerta como revisada.');
-    } finally {
-      setReviewingId(null);
     }
   };
 
@@ -89,7 +74,7 @@ export const AdminAlertsScreen = () => {
             style={styles.alertCard}
           >
             <View style={styles.alertIconCircle}>
-              <AlertTriangle color={theme.colors.amber} size={22} />
+              <AlertTriangle color={theme.colors.orange} size={22} />
             </View>
 
             <View style={styles.alertInfo}>
@@ -105,14 +90,6 @@ export const AdminAlertsScreen = () => {
                   : 'Reciente'}
               </Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.reviewBtn}
-              onPress={() => handleReview(alertItem.id)}
-              disabled={reviewingId === alertItem.id}
-            >
-              <Check color={theme.colors.emerald} size={18} />
-            </TouchableOpacity>
           </MotiView>
         ))
       ) : (
@@ -125,83 +102,80 @@ export const AdminAlertsScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: 110,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.lg,
-    marginTop: 2,
-  },
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  alertIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  alertInfo: {
-    flex: 1,
-  },
-  employeeName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  alertDetail: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  alertDate: {
-    fontSize: 11,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
-  reviewBtn: {
-    padding: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: theme.borderRadius.md,
-  },
-  emptyContainer: {
-    padding: theme.spacing.xxl,
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    content: {
+      padding: theme.spacing.lg,
+      paddingTop: theme.spacing.xl,
+      paddingBottom: theme.spacing.xxl,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.lg,
+      marginTop: 2,
+    },
+    alertCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderColor: 'rgba(249, 115, 22, 0.3)',
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      ...theme.shadows.card,
+    },
+    alertIconCircle: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: isDark ? 'rgba(249, 115, 22, 0.15)' : 'rgba(249, 115, 22, 0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: theme.spacing.md,
+    },
+    alertInfo: {
+      flex: 1,
+    },
+    employeeName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    alertDetail: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    alertDate: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+    },
+    emptyContainer: {
+      padding: theme.spacing.xxl,
+      alignItems: 'center',
+      gap: 12,
+    },
+    emptyText: {
+      color: theme.colors.textMuted,
+      fontSize: 14,
+      textAlign: 'center',
+    },
+  });

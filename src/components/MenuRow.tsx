@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
-import { theme } from '../theme/theme';
+import { Theme } from '../theme/theme';
+import { useTheme } from '../context/ThemeContext';
 import { ChevronRight } from 'lucide-react-native';
 
 export interface MenuRowProps {
@@ -24,9 +25,13 @@ export const MenuRow: React.FC<MenuRowProps> = ({
   icon,
   onPress,
   badge,
-  badgeColor = theme.colors.cyan,
+  badgeColor,
   last = false,
 }) => {
+  const { theme, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+
+  const activeBadgeColor = badgeColor || theme.colors.cyan;
   const displayTitle = title || label || '';
   const displaySubtitle = subtitle || value || '';
 
@@ -38,8 +43,8 @@ export const MenuRow: React.FC<MenuRowProps> = ({
         {displaySubtitle ? <Text style={styles.subtitle}>{displaySubtitle}</Text> : null}
       </View>
       {badge && (
-        <View style={[styles.badge, { backgroundColor: `${badgeColor}18` }]}>
-          <Text style={[styles.badgeText, { color: badgeColor }]}>{badge}</Text>
+        <View style={[styles.badge, { backgroundColor: `${activeBadgeColor}18` }]}>
+          <Text style={[styles.badgeText, { color: activeBadgeColor }]}>{badge}</Text>
         </View>
       )}
       {onPress && <ChevronRight color={theme.colors.textMuted} size={18} />}
@@ -57,44 +62,45 @@ export const MenuRow: React.FC<MenuRowProps> = ({
   return content;
 };
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  iconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.borderRadius.full,
-    marginRight: 6,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.glassBorder,
+    },
+    iconCircle: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: theme.spacing.md,
+    },
+    contentContainer: {
+      flex: 1,
+    },
+    title: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    badge: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: theme.borderRadius.full,
+      marginRight: 6,
+    },
+    badgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+    },
+  });

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, Dimensions } from 'react-native';
 import Svg, { Rect, LinearGradient, Defs, Stop } from 'react-native-svg';
-import { theme } from '../theme/theme';
+import { Theme } from '../theme/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface SimpleBarChartProps {
   data: any[];
@@ -12,8 +13,11 @@ const { width } = Dimensions.get('window');
 
 export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
   data,
-  height = 175,
+  height = 180,
 }) => {
+  const { theme, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+
   if (!data || data.length === 0) {
     return (
       <View style={[styles.container, { height }]}>
@@ -23,98 +27,65 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
   }
 
   const chartWidth = width - 64;
+  const barMargin = 8;
   const numBars = data.length;
-  const barMargin = Math.max(6, (chartWidth - numBars * 32) / (numBars + 1));
-  const pillarWidth = Math.min(36, Math.max(22, (chartWidth - barMargin * (numBars + 1)) / numBars));
-  const pillarHeight = height - 55;
-  const pillarY = 10;
+  const barWidth = Math.max(6, (chartWidth - barMargin * (numBars + 1)) / numBars);
+
+  const maxVal = Math.max(
+    ...data.map((d) => {
+      if (typeof d.punctuality_percent === 'number') return d.punctuality_percent;
+      return (d.onTime || 0) + (d.late || 0) + (d.absent || 0);
+    }),
+    1,
+  );
 
   return (
     <View style={styles.container}>
-      <Svg width={chartWidth} height={height - 25}>
+      <Svg width={chartWidth} height={height}>
         <Defs>
-          {/* Bright Cyan / Electric Blue Gradient (Web style) */}
-          <LinearGradient id="gradientCyan" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#00D2FF" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#06B6D4" stopOpacity="0.9" />
+          <LinearGradient id="gradientOnTime" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={theme.colors.emerald} stopOpacity="1" />
+            <Stop offset="1" stopColor="#059669" stopOpacity="0.8" />
           </LinearGradient>
-
-          {/* Warm Amber / Orange Gradient (Web style) */}
           <LinearGradient id="gradientLate" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#FFA726" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#F59E0B" stopOpacity="0.9" />
-          </LinearGradient>
-
-          {/* Rose Red Gradient */}
-          <LinearGradient id="gradientAbsent" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#F87171" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#EF4444" stopOpacity="0.9" />
+            <Stop offset="0" stopColor={theme.colors.orange} stopOpacity="1" />
+            <Stop offset="1" stopColor="#D97706" stopOpacity="0.8" />
           </LinearGradient>
         </Defs>
 
         {data.map((d, i) => {
-          const x = barMargin + i * (pillarWidth + barMargin);
-          const hPercent = d.heightPercent ?? (d.late > 0 ? 0.3 : d.absent > 0 ? 0.15 : 0.55);
-          const barHeight = Math.max(14, Math.min(pillarHeight - 6, pillarHeight * hPercent));
-
-          // Position inside the pillar track
-          const posOffset = d.positionOffset ?? 0.2;
-          const maxTravel = pillarHeight - barHeight - 6;
-          const barY = pillarY + 3 + maxTravel * Math.min(1, Math.max(0, posOffset));
-
-          const fillGradient =
-            d.absent > 0
-              ? 'url(#gradientAbsent)'
-              : d.late > 0
-              ? 'url(#gradientLate)'
-              : 'url(#gradientCyan)';
+          const val =
+            typeof d.punctuality_percent === 'number'
+              ? d.punctuality_percent
+              : (d.onTime || 0) + (d.late || 0);
+          const barHeight = Math.max(6, (val / maxVal) * (height - 40));
+          const x = barMargin + i * (barWidth + barMargin);
+          const y = height - 30 - barHeight;
 
           return (
-            <React.Fragment key={i}>
-              {/* Background Pillar Track (Capsule Shape) */}
-              <Rect
-                x={x}
-                y={pillarY}
-                width={pillarWidth}
-                height={pillarHeight}
-                rx={10}
-                ry={10}
-                fill="rgba(255, 255, 255, 0.07)"
-              />
-
-              {/* Inner Colored Active Bar */}
-              <Rect
-                x={x + 3}
-                y={barY}
-                width={pillarWidth - 6}
-                height={barHeight}
-                rx={6}
-                ry={6}
-                fill={fillGradient}
-              />
-            </React.Fragment>
+            <Rect
+              key={i}
+              x={x}
+              y={y}
+              width={barWidth}
+              height={barHeight}
+              rx={4}
+              ry={4}
+              fill={d.late > 0 ? 'url(#gradientLate)' : 'url(#gradientOnTime)'}
+            />
           );
         })}
       </Svg>
 
-      {/* Day Labels below pillars */}
-      <View style={[styles.labelsRow, { width: chartWidth }]}>
+      {/* Day Labels */}
+      <View style={styles.labelsRow}>
         {data.map((d, i) => {
           const rawLabel = d.day ?? d.dia ?? d.fecha ?? i + 1;
           const labelStr = String(rawLabel);
-          const xCenter = barMargin + i * (pillarWidth + barMargin);
           return (
             <Text
               key={i}
-              style={[
-                styles.dayLabel,
-                {
-                  position: 'absolute',
-                  left: xCenter,
-                  width: pillarWidth,
-                  textAlign: 'center',
-                },
-              ]}
+              style={[styles.dayLabel, { width: barWidth + barMargin, textAlign: 'center' }]}
               numberOfLines={1}
             >
               {labelStr.slice(0, 3).toUpperCase()}
@@ -126,32 +97,33 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.md,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  noDataText: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    alignSelf: 'center',
-    marginVertical: 'auto',
-  },
-  labelsRow: {
-    height: 20,
-    marginTop: 4,
-    position: 'relative',
-  },
-  dayLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    noDataText: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+      alignSelf: 'center',
+      marginVertical: 'auto',
+    },
+    labelsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      width: '100%',
+      marginTop: 8,
+    },
+    dayLabel: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+    },
+  });

@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { LoginScreen } from '../screens/LoginScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
@@ -16,7 +17,7 @@ import { AdminProfileScreen } from '../screens/admin/AdminProfileScreen';
 import { AdminSchedulesScreen } from '../screens/admin/AdminSchedulesScreen';
 import { AdminDevicesScreen } from '../screens/admin/AdminDevicesScreen';
 import { AdminAlertsScreen } from '../screens/admin/AdminAlertsScreen';
-import { theme } from '../theme/theme';
+import { AdminCompanyScreen } from '../screens/admin/AdminCompanyScreen';
 import {
   Clock,
   Calendar,
@@ -32,6 +33,8 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const EmployeeTabs = () => {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -80,6 +83,8 @@ const EmployeeTabs = () => {
 };
 
 const AdminTabs = () => {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -116,7 +121,7 @@ const AdminTabs = () => {
         }}
       />
       <Tab.Screen
-        name="AdminReportes"
+        name="AdminReports"
         component={AdminReportsScreen}
         options={{
           tabBarLabel: 'Reportes',
@@ -137,6 +142,7 @@ const AdminTabs = () => {
 
 export const RootNavigator = () => {
   const { token, user, isInitializing } = useAuth();
+  const { theme, isDark } = useTheme();
 
   if (isInitializing) {
     return (
@@ -155,9 +161,33 @@ export const RootNavigator = () => {
 
   const isAdmin = user?.role === 'COMPANY_ADMIN' || user?.role === 'SUPER_ADMIN';
 
+  const navTheme = isDark
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          background: theme.colors.background,
+          card: theme.colors.surface,
+          text: theme.colors.textPrimary,
+          border: theme.colors.glassBorder,
+          primary: theme.colors.primary,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          background: theme.colors.background,
+          card: theme.colors.surface,
+          text: theme.colors.textPrimary,
+          border: theme.colors.glassBorder,
+          primary: theme.colors.primary,
+        },
+      };
+
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
+    <NavigationContainer theme={navTheme}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!token ? (
           <Stack.Screen name="Login" component={LoginScreen} />
@@ -167,6 +197,7 @@ export const RootNavigator = () => {
             <Stack.Screen name="AdminSchedules" component={AdminSchedulesScreen} />
             <Stack.Screen name="AdminDevices" component={AdminDevicesScreen} />
             <Stack.Screen name="AdminAlerts" component={AdminAlertsScreen} />
+            <Stack.Screen name="AdminCompany" component={AdminCompanyScreen} />
           </>
         ) : (
           <>

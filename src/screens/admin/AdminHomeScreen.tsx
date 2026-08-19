@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,12 +9,12 @@ import {
   Image,
 } from 'react-native';
 import { MotiView } from 'moti';
-import { theme } from '../../theme/theme';
+import { Theme } from '../../theme/theme';
+import { useTheme } from '../../context/ThemeContext';
 import { dashboardApi, attendanceApi } from '../../services/api';
-import { DashboardKpis, WeeklyStat, AlertItem, HourlyStat } from '../../types';
+import { DashboardKpis, WeeklyStat, AlertItem } from '../../types';
 import { StatCard } from '../../components/StatCard';
-import { StackedBarChart } from '../../components/StackedBarChart';
-import { HourlyDistributionChart } from '../../components/HourlyDistributionChart';
+import { SimpleBarChart } from '../../components/SimpleBarChart';
 import {
   CheckCircle2,
   Clock,
@@ -24,17 +24,18 @@ import {
   Bell,
   Sparkles,
   Radio,
-  Activity,
 } from 'lucide-react-native';
 
 export const AdminHomeScreen = () => {
+  const { theme, isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStat[]>([]);
-  const [hourlyStats, setHourlyStats] = useState<HourlyStat[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
+
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   useEffect(() => {
     loadData();
@@ -43,16 +44,14 @@ export const AdminHomeScreen = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [kpiData, weeklyData, hourlyData, alertData, liveLogsData] = await Promise.all([
+      const [kpiData, weeklyData, alertData, liveLogsData] = await Promise.all([
         dashboardApi.getToday().catch(() => null),
         dashboardApi.getWeeklyStats().catch(() => []),
-        dashboardApi.getHourlyDistribution().catch(() => []),
         dashboardApi.getAlerts().catch(() => []),
         attendanceApi.getTodayLogs().catch(() => []),
       ]);
       setKpis(kpiData);
       setWeeklyStats(weeklyData);
-      setHourlyStats(hourlyData);
       setAlerts(alertData);
       setTodayLogs(liveLogsData);
     } catch (e) {
@@ -145,7 +144,6 @@ export const AdminHomeScreen = () => {
       {todayLogs && todayLogs.length > 0 ? (
         todayLogs.slice(0, 5).map((log, i) => {
           const isLate = log.is_late;
-          const isEntrada = log.type === 'ENTRADA';
           const timeStr = log.timestamp
             ? new Date(log.timestamp).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })
             : '---';
@@ -188,14 +186,7 @@ export const AdminHomeScreen = () => {
         <BarChart3 color={theme.colors.cyan} size={18} />
         <Text style={styles.sectionTitle}>ASISTENCIA DE LA SEMANA</Text>
       </View>
-      <StackedBarChart data={weeklyStats} />
-
-      {/* Hourly Distribution */}
-      <View style={styles.sectionHeader}>
-        <Activity color={theme.colors.cyan} size={18} />
-        <Text style={styles.sectionTitle}>DISTRIBUCIÓN DE MARCADOS POR HORA (HOY)</Text>
-      </View>
-      <HourlyDistributionChart data={hourlyStats} />
+      <SimpleBarChart data={weeklyStats} />
 
       {/* Pending Alerts Section */}
       {alerts && alerts.length > 0 && (
@@ -226,145 +217,148 @@ export const AdminHomeScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: 110,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-  },
-  headerBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  adminBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 212, 255, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.full,
-  },
-  adminBadgeText: {
-    color: theme.colors.cyan,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginVertical: theme.spacing.md,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.textMuted,
-    letterSpacing: 1,
-  },
-  liveLogCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.glassBorder,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  selfieThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: theme.spacing.md,
-  },
-  liveLogAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.cyan,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  avatarText: {
-    color: '#050A14',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  liveLogContent: {
-    flex: 1,
-  },
-  liveLogName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  liveLogMeta: {
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  liveLogTime: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.cyan,
-  },
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  alertContent: {
-    flex: 1,
-  },
-  alertEmployee: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  alertDetail: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    marginBottom: theme.spacing.md,
-  },
-});
+const createStyles = (theme: Theme, isDark: boolean) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    content: {
+      padding: theme.spacing.lg,
+      paddingTop: theme.spacing.xl,
+      paddingBottom: theme.spacing.xxl,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    headerBanner: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    adminBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(0, 212, 255, 0.15)' : 'rgba(2, 132, 199, 0.12)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.full,
+    },
+    adminBadgeText: {
+      color: theme.colors.cyan,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    kpiGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginVertical: theme.spacing.md,
+    },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      letterSpacing: 1,
+    },
+    liveLogCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      ...theme.shadows.card,
+    },
+    selfieThumb: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginRight: theme.spacing.md,
+    },
+    liveLogAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.cyan,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: theme.spacing.md,
+    },
+    avatarText: {
+      color: '#FFFFFF',
+      fontWeight: '800',
+      fontSize: 16,
+    },
+    liveLogContent: {
+      flex: 1,
+    },
+    liveLogName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    liveLogMeta: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    liveLogTime: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.cyan,
+    },
+    alertCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderColor: 'rgba(245, 158, 11, 0.3)',
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      ...theme.shadows.card,
+    },
+    alertContent: {
+      flex: 1,
+    },
+    alertEmployee: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    alertDetail: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    emptyText: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+      marginBottom: theme.spacing.md,
+    },
+  });
