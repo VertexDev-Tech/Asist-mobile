@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Theme } from '../../theme/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useAlert } from '../../context/AlertContext';
 import { MenuRow } from '../../components/MenuRow';
 import {
   ShieldCheck,
@@ -23,31 +24,28 @@ import {
   LogOut,
   Sun,
   Moon,
-  Sparkles,
+  Crown,
+  Building2,
 } from 'lucide-react-native';
 
 export const AdminProfileScreen = () => {
   const { user, logout } = useAuth();
   const { theme, isDark, setThemeMode } = useTheme();
+  const { showConfirm } = useAlert();
   const navigation = useNavigation<any>();
 
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   const handleLogout = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
+    showConfirm(
       'Cerrar Sesión',
       '¿Estás seguro de que deseas salir del panel de administración?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ],
+      async () => {
+        await logout();
+      },
+      'Cerrar Sesión',
+      true,
     );
   };
 
@@ -58,20 +56,32 @@ export const AdminProfileScreen = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Perfil de Administrador</Text>
+      <Text style={styles.title}>
+        {isSuperAdmin ? 'Perfil Super Admin' : 'Perfil de Administrador'}
+      </Text>
       <Text style={styles.subtitle}>Gestión de empresa y ajustes de la cuenta</Text>
 
       {/* Admin Hero Card */}
       <View style={styles.cardHero}>
         <LinearGradient
-          colors={theme.colors.gradients.cyan}
+          colors={
+            isSuperAdmin
+              ? ['#1E3A8A', '#0284C7', '#00D4FF']
+              : theme.colors.gradients.cyan
+          }
           style={styles.heroGradient}
         >
           <View style={styles.heroAvatar}>
-            <ShieldCheck color="#050A14" size={32} />
+            {isSuperAdmin ? (
+              <Crown color="#F59E0B" size={32} />
+            ) : (
+              <ShieldCheck color="#050A14" size={32} />
+            )}
           </View>
           <Text style={styles.heroName}>{user?.full_name || 'Administrador'}</Text>
-          <Text style={styles.heroRole}>{user?.role || 'COMPANY_ADMIN'}</Text>
+          <View style={styles.roleBadgeHero}>
+            <Text style={styles.heroRole}>{user?.role || 'COMPANY_ADMIN'}</Text>
+          </View>
         </LinearGradient>
       </View>
 
@@ -137,6 +147,12 @@ export const AdminProfileScreen = () => {
           subtitle="Revisión de marcaciones fuera de zona"
           icon={<AlertTriangle color={theme.colors.rose} size={20} />}
           onPress={() => navigation.navigate('AdminAlerts')}
+        />
+        <MenuRow
+          title="Mi Empresa"
+          subtitle="Datos corporativos y estado de suscripción"
+          icon={<Building2 color={theme.colors.emerald} size={20} />}
+          onPress={() => navigation.navigate('AdminCompany')}
           last
         />
       </View>
@@ -150,7 +166,7 @@ export const AdminProfileScreen = () => {
         </View>
         <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
           <Text style={styles.infoLabel}>Empresa Asociada</Text>
-          <Text style={styles.infoValue}>{user?.company_name || 'Mi Empresa'}</Text>
+          <Text style={styles.infoValue}>{user?.company_name || 'Sede Principal UBIX'}</Text>
         </View>
       </View>
 
@@ -211,13 +227,20 @@ const createStyles = (theme: Theme, isDark: boolean) =>
     heroName: {
       fontSize: 20,
       fontWeight: '800',
-      color: '#050A14',
+      color: '#FFFFFF',
+    },
+    roleBadgeHero: {
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: theme.borderRadius.full,
+      marginTop: 6,
     },
     heroRole: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: 'rgba(5, 10, 20, 0.75)',
-      marginTop: 2,
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#FFFFFF',
+      letterSpacing: 0.8,
     },
     sectionHeader: {
       fontSize: 11,

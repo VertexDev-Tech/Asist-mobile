@@ -162,8 +162,39 @@ export const employeesApi = {
     const res = await api.get('/employees');
     return res.data || [];
   },
-  create: async (data: { full_name: string; dni: string; pin: string; position?: string; schedule_id?: number }) => {
+  create: async (data: {
+    full_name: string;
+    dni: string;
+    email?: string;
+    phone?: string;
+    position?: string;
+    schedule_id?: number | null;
+    pin?: string;
+  }) => {
     const res = await api.post('/employees', data);
+    return res.data;
+  },
+  update: async (
+    id: number,
+    data: {
+      full_name?: string;
+      dni?: string;
+      email?: string;
+      phone?: string;
+      position?: string;
+      schedule_id?: number | null;
+      active?: boolean;
+    },
+  ) => {
+    const res = await api.put(`/employees/${id}`, data);
+    return res.data;
+  },
+  updatePin: async (id: number, pin: string) => {
+    const res = await api.put(`/employees/${id}/pin`, { pin });
+    return res.data;
+  },
+  delete: async (id: number) => {
+    const res = await api.delete(`/employees/${id}`);
     return res.data;
   },
   resetPin: async (employeeId: number, newPin: string) => {
@@ -222,3 +253,51 @@ export const reclamacionesApi = {
     return res.data;
   },
 };
+
+export const superAdminApi = {
+  getStats: async (): Promise<any> => {
+    const res = await api.get('/admin/stats');
+    return res.data;
+  },
+  getCompanies: async (): Promise<any[]> => {
+    const res = await api.get('/admin/companies');
+    return res.data || [];
+  },
+  getCompanyDetail: async (id: number): Promise<any> => {
+    const res = await api.get(`/admin/companies/${id}`);
+    return res.data;
+  },
+  updateCompanyStatus: async (id: number, status: string) => {
+    const res = await api.put(`/admin/companies/${id}/status`, { status });
+    return res.data;
+  },
+  changePlan: async (id: number, plan: string) => {
+    const res = await api.put(`/admin/companies/${id}/plan`, { plan });
+    return res.data;
+  },
+  suspendCompany: async (id: number) => {
+    const res = await api.put(`/admin/companies/${id}/suspend`);
+    return res.data;
+  },
+  reactivateCompany: async (id: number) => {
+    const res = await api.put(`/admin/companies/${id}/reactivate`);
+    return res.data;
+  },
+  impersonate: async (companyId: number): Promise<{ access_token: string }> => {
+    const res = await api.post(`/admin/impersonate/${companyId}`);
+    return res.data;
+  },
+  notifyExpiring: async (id: number) => {
+    const res = await api.post(`/admin/companies/${id}/notify-expiring`);
+    return res.data;
+  },
+  notifyExpired: async (id: number) => {
+    const res = await api.post(`/admin/companies/${id}/notify-expired`);
+    return res.data;
+  },
+  notifyPayment: async (id: number) => {
+    const res = await api.post(`/admin/companies/${id}/notify-payment`);
+    return res.data;
+  },
+};
+

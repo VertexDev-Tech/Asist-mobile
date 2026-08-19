@@ -149,3 +149,41 @@ export interface SubscriptionInfo {
   current_period_end?: string | null;
   [key: string]: unknown;
 }
+
+// ─── SUPER ADMIN TYPES ───────────────────────────────────────
+export interface SuperAdminStats {
+  total: number;
+  byStatus: Array<{ status: string; _count: number }>;
+  expiringSoon: Array<{
+    id: number;
+    company_id: number;
+    plan: string;
+    current_period_end: string;
+    company: CompanyInfo;
+  }>;
+}
+
+export interface SuperAdminCompanyItem {
+  id: number;
+  name: string;
+  slug: string;
+  email_admin: string;
+  plan: string;
+  status: 'TRIAL' | 'ACTIVE' | 'SUSPENDED';
+  ruc?: string;
+  sector?: string;
+  phone?: string;
+  created_at: string;
+  subscriptions?: Array<{
+    id: number;
+    plan: string;
+    status: string;
+    started_at: string;
+    current_period_end: string;
+  }>;
+  _count?: {
+    employees?: number;
+    users?: number;
+    attendance?: number;
+  };
+}

@@ -12,7 +12,7 @@ interface ThemeContextType {
   setThemeMode: (mode: ThemeMode) => void;
 }
 
-const THEME_STORAGE_KEY = '@ubix_theme_mode';
+const THEME_STORAGE_KEY = 'ubix_theme_mode';
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: darkTheme,

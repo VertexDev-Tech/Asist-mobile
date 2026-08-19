@@ -9,110 +9,209 @@ import {
   RefreshControl,
   TouchableOpacity,
   Modal,
-  Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Theme } from '../../theme/theme';
 import { useTheme } from '../../context/ThemeContext';
-import { employeesApi } from '../../services/api';
+import { useAlert } from '../../context/AlertContext';
+import { employeesApi, schedulesApi } from '../../services/api';
 import { EmployeeItem } from '../../types';
-import { Search, UserCheck, UserX, UserPlus, X, RefreshCw } from 'lucide-react-native';
+import {
+  Search,
+  UserCheck,
+  UserX,
+  UserPlus,
+  X,
+  Pencil,
+  KeyRound,
+  ChevronDown,
+  Clock,
+  Briefcase,
+  Mail,
+  Phone,
+  Hash,
+  Check,
+} from 'lucide-react-native';
 
 export const AdminEmployeesScreen = () => {
   const { theme, isDark } = useTheme();
+  const { showAlert, showSuccess, showError, showConfirm, showPrompt } = useAlert();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
 
-  // Modal State
+  // Modal State (Create or Edit)
   const [modalVisible, setModalVisible] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form Fields (100% Web Parity)
   const [fullName, setFullName] = useState('');
   const [dni, setDni] = useState('');
-  const [pin, setPin] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [position, setPosition] = useState('');
+  const [scheduleId, setScheduleId] = useState<number | null>(null);
+
+  // Dropdown Picker State
+  const [schedulePickerVisible, setSchedulePickerVisible] = useState(false);
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   useEffect(() => {
-    loadEmployees();
+    loadData();
   }, []);
 
-  const loadEmployees = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await employeesApi.list();
-      setEmployees(data || []);
+      const [empList, schedList] = await Promise.all([
+        employeesApi.list().catch(() => []),
+        schedulesApi.list().catch(() => []),
+      ]);
+      setEmployees(empList || []);
+      setSchedules(schedList || []);
     } catch (e) {
-      console.log('Error loading employees:', e);
+      console.log('Error loading data:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleCreateEmployee = async () => {
-    if (!fullName.trim() || !dni.trim() || !pin.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Campos requeridos', 'Ingresa nombre, DNI y un PIN de 6 dígitos.');
+  const handleOpenCreate = () => {
+    setIsEditing(false);
+    setEditingEmployeeId(null);
+    setFullName('');
+    setDni('');
+    setEmail('');
+    setPhone('');
+    setPosition('');
+    setScheduleId(schedules.length > 0 ? schedules[0].id : null);
+    setModalVisible(true);
+  };
+
+  const handleOpenEdit = (item: EmployeeItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsEditing(true);
+    setEditingEmployeeId(item.id);
+    setFullName(item.full_name || '');
+    setDni(item.dni || '');
+    setEmail(item.email || '');
+    setPhone(item.phone || '');
+    setPosition(item.position || '');
+    setScheduleId(item.schedule_id || (schedules.length > 0 ? schedules[0].id : null));
+    setModalVisible(true);
+  };
+
+  const handleSaveEmployee = async () => {
+    if (!fullName.trim() || !dni.trim()) {
+      showError('Campos requeridos', 'Ingresa el nombre completo y DNI del colaborador.');
       return;
     }
 
     try {
       setIsSubmitting(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await employeesApi.create({
-        full_name: fullName.trim(),
-        dni: dni.trim(),
-        pin: pin.trim(),
-        position: position.trim() || 'Colaborador',
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('¡Empleado Registrado! 🎉', `Empleado ${fullName} fue agregado con éxito.`);
+
+      if (isEditing && editingEmployeeId) {
+        await employeesApi.update(editingEmployeeId, {
+          full_name: fullName.trim(),
+          dni: dni.trim(),
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+          position: position.trim() || 'Colaborador',
+          schedule_id: scheduleId || undefined,
+        });
+
+        showSuccess('¡Colaborador Actualizado! ✅', `Los datos de "${fullName}" fueron guardados.`);
+      } else {
+        await employeesApi.create({
+          full_name: fullName.trim(),
+          dni: dni.trim(),
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
+          position: position.trim() || 'Colaborador',
+          schedule_id: scheduleId || undefined,
+        });
+        showSuccess('¡Colaborador Registrado! 🎉', `"${fullName}" ha sido agregado con éxito.`);
+      }
+
       setModalVisible(false);
-      setFullName('');
-      setDni('');
-      setPin('');
-      setPosition('');
-      loadEmployees();
+      loadData();
     } catch (error: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = error.response?.data?.message || 'No se pudo registrar el empleado.';
-      Alert.alert('Error', Array.isArray(msg) ? msg.join('\n') : String(msg));
+      const msg = error.response?.data?.message || 'No se pudo procesar la solicitud.';
+      showError('Error al guardar', Array.isArray(msg) ? msg.join('\n') : String(msg));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleToggleDeactivate = (item: EmployeeItem) => {
+    const isActive = item.active !== false;
+    const actionLabel = isActive ? 'Dar de baja' : 'Reactivar';
+
+    showConfirm(
+      `${actionLabel} Colaborador`,
+      `¿Estás seguro de que deseas ${actionLabel.toLowerCase()} a "${item.full_name}"?`,
+      async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await employeesApi.update(item.id, { active: !isActive });
+          showSuccess(
+            'Estado Actualizado',
+            `El colaborador "${item.full_name}" ha sido ${isActive ? 'dado de baja' : 'reactivado'}.`,
+          );
+          loadData();
+        } catch (e) {
+          showError('Error', 'No se pudo cambiar el estado del colaborador.');
+        }
+      },
+      actionLabel,
+      isActive,
+    );
+  };
+
   const handleResetPin = (item: EmployeeItem) => {
-    Alert.prompt(
+    showPrompt(
       'Reiniciar PIN',
-      `Ingresa el nuevo PIN de 6 dígitos para ${item.full_name}:`,
+      `Ingresa el nuevo PIN de 4 a 6 dígitos para ${item.full_name}:`,
       async (newPin) => {
         if (!newPin || newPin.trim().length < 4) {
-          Alert.alert('PIN inválido', 'El PIN debe tener al menos 4 dígitos.');
+          showError('PIN inválido', 'El PIN debe tener al menos 4 dígitos numéricos.');
           return;
         }
         try {
           await employeesApi.resetPin(item.id, newPin.trim());
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert('Éxito', `El PIN de ${item.full_name} fue actualizado.`);
+          showSuccess('¡PIN Actualizado!', `El PIN de acceso de ${item.full_name} fue actualizado.`);
         } catch (e) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          Alert.alert('Error', 'No se pudo actualizar el PIN.');
+          showError('Error', 'No se pudo actualizar el PIN.');
         }
       },
+      'Solo números (4 a 6 dígitos)',
+      'number-pad',
     );
   };
+
+  const selectedScheduleName = useMemo(() => {
+    const found = schedules.find((s) => s.id === scheduleId);
+    return found ? found.name : 'Seleccionar horario...';
+  }, [schedules, scheduleId]);
 
   const filteredEmployees = employees.filter((e) => {
     const q = search.toLowerCase();
     return (
       (e.full_name && e.full_name.toLowerCase().includes(q)) ||
       (e.dni && e.dni.includes(q)) ||
+      (e.email && e.email.toLowerCase().includes(q)) ||
       (e.position && e.position.toLowerCase().includes(q))
     );
   });
@@ -126,7 +225,7 @@ export const AdminEmployeesScreen = () => {
         </View>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => setModalVisible(true)}
+          onPress={handleOpenCreate}
           activeOpacity={0.8}
         >
           <LinearGradient
@@ -161,45 +260,76 @@ export const AdminEmployeesScreen = () => {
         from={{ opacity: 0, translateY: 10 }}
         animate={{ opacity: 1, translateY: 0 }}
         transition={{ type: 'timing', duration: 350, delay: index * 30 }}
-        style={styles.employeeCard}
+        style={[styles.employeeCard, !isActive && { opacity: 0.65 }]}
       >
-        <View style={styles.avatarCircle}>
+        <View style={[styles.avatarCircle, !isActive && { backgroundColor: theme.colors.textMuted }]}>
           <Text style={styles.avatarText}>
             {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'E'}
           </Text>
         </View>
 
         <View style={styles.employeeInfo}>
-          <Text style={styles.employeeName}>{item.full_name}</Text>
+          <View style={styles.nameStatusRow}>
+            <Text style={styles.employeeName}>{item.full_name}</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: isActive
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : 'rgba(239, 68, 68, 0.12)',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  { color: isActive ? theme.colors.emerald : theme.colors.rose },
+                ]}
+              >
+                {isActive ? 'Activo' : 'De baja'}
+              </Text>
+            </View>
+          </View>
+
           <Text style={styles.employeeDetails}>
             DNI: {item.dni} | {item.position || 'Colaborador'}
           </Text>
+          {!!item.email && <Text style={styles.employeeEmail}>{item.email}</Text>}
         </View>
 
-        {/* Actions */}
-        <TouchableOpacity
-          style={styles.resetPinBtn}
-          onPress={() => handleResetPin(item)}
-          activeOpacity={0.7}
-        >
-          <RefreshCw color={theme.colors.cyan} size={18} />
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.cardActionsRow}>
+          {/* Editar */}
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={() => handleOpenEdit(item)}
+            activeOpacity={0.7}
+          >
+            <Pencil color={theme.colors.cyan} size={18} />
+          </TouchableOpacity>
 
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor: isActive
-                ? 'rgba(16, 185, 129, 0.15)'
-                : 'rgba(239, 68, 68, 0.15)',
-            },
-          ]}
-        >
-          {isActive ? (
-            <UserCheck color={theme.colors.emerald} size={18} />
-          ) : (
-            <UserX color={theme.colors.rose} size={18} />
-          )}
+          {/* Reset PIN */}
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={() => handleResetPin(item)}
+            activeOpacity={0.7}
+          >
+            <KeyRound color={theme.colors.amber} size={18} />
+          </TouchableOpacity>
+
+          {/* Dar de baja / Reactivar */}
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={() => handleToggleDeactivate(item)}
+            activeOpacity={0.7}
+          >
+            {isActive ? (
+              <UserX color={theme.colors.rose} size={18} />
+            ) : (
+              <UserCheck color={theme.colors.emerald} size={18} />
+            )}
+          </TouchableOpacity>
         </View>
       </MotiView>
     );
@@ -226,79 +356,182 @@ export const AdminEmployeesScreen = () => {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              loadEmployees();
+              loadData();
             }}
             tintColor={theme.colors.cyan}
           />
         }
       />
 
-      {/* Create Employee Modal */}
+      {/* Edit / Create Employee Modal (Exact Web Replica) */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
+            {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nuevo Colaborador</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X color={theme.colors.textMuted} size={22} />
+              <Text style={styles.modalTitle}>
+                {isEditing ? 'Editar Empleado' : 'Nuevo Empleado'}
+              </Text>
+              <TouchableOpacity
+                style={styles.closeModalBtn}
+                onPress={() => setModalVisible(false)}
+              >
+                <X color={theme.colors.textMuted} size={20} />
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Nombre completo"
-              placeholderTextColor={theme.colors.textMuted}
-              value={fullName}
-              onChangeText={setFullName}
-            />
+            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+              {/* Row 1: Nombre Completo & DNI */}
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>NOMBRE COMPLETO *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Bryan Jhonatan vera"
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={fullName}
+                    onChangeText={setFullName}
+                  />
+                </View>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Número de DNI"
-              placeholderTextColor={theme.colors.textMuted}
-              keyboardType="number-pad"
-              value={dni}
-              onChangeText={setDni}
-              maxLength={12}
-            />
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>DNI *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="71888905"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="number-pad"
+                    value={dni}
+                    onChangeText={setDni}
+                    maxLength={12}
+                  />
+                </View>
+              </View>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="PIN de Acceso (ej: 123456)"
-              placeholderTextColor={theme.colors.textMuted}
-              keyboardType="number-pad"
-              value={pin}
-              onChangeText={setPin}
-              maxLength={8}
-            />
+              {/* Row 2: Email & Teléfono */}
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>EMAIL</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="ejemplo@gmail.com"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                </View>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Cargo o Puesto (ej: Operador)"
-              placeholderTextColor={theme.colors.textMuted}
-              value={position}
-              onChangeText={setPosition}
-            />
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>TELÉFONO</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="921955217"
+                    placeholderTextColor={theme.colors.textMuted}
+                    keyboardType="phone-pad"
+                    value={phone}
+                    onChangeText={setPhone}
+                    maxLength={15}
+                  />
+                </View>
+              </View>
 
-            <TouchableOpacity
-              style={styles.submitModalBtn}
-              onPress={handleCreateEmployee}
-              disabled={isSubmitting}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={theme.colors.gradients.cyan}
-                style={styles.submitModalGradient}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.submitModalText}>REGISTRAR EMPLEADO</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+              {/* Row 3: Cargo & Horario Asignado */}
+              <View style={styles.formRow}>
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>CARGO</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="Ingeniero de oficina..."
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={position}
+                    onChangeText={setPosition}
+                  />
+                </View>
+
+                <View style={styles.formCol}>
+                  <Text style={styles.fieldLabel}>HORARIO ASIGNADO</Text>
+                  <TouchableOpacity
+                    style={styles.selectPickerBtn}
+                    onPress={() => setSchedulePickerVisible(!schedulePickerVisible)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.selectPickerBtnText,
+                        !scheduleId && { color: theme.colors.textMuted },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {selectedScheduleName}
+                    </Text>
+                    <ChevronDown color={theme.colors.textMuted} size={18} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Schedule Dropdown Menu (If expanded) */}
+              {schedulePickerVisible && (
+                <View style={styles.schedulesDropdown}>
+                  {schedules.map((s) => {
+                    const isSelected = s.id === scheduleId;
+                    return (
+                      <TouchableOpacity
+                        key={s.id}
+                        style={[
+                          styles.scheduleItemRow,
+                          isSelected && styles.scheduleItemRowActive,
+                        ]}
+                        onPress={() => {
+                          setScheduleId(s.id);
+                          setSchedulePickerVisible(false);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.scheduleItemText,
+                            isSelected && styles.scheduleItemTextActive,
+                          ]}
+                        >
+                          {s.name} ({s.start_time?.substring(0, 5)} - {s.end_time?.substring(0, 5)})
+                        </Text>
+                        {isSelected && <Check color={theme.colors.cyan} size={16} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Action Buttons Row (Cancelar / Guardar) */}
+              <View style={styles.modalActionsRow}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setModalVisible(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalSaveBtn}
+                  onPress={handleSaveEmployee}
+                  disabled={isSubmitting}
+                  activeOpacity={0.8}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="#050A14" />
+                  ) : (
+                    <Text style={styles.modalSaveBtnText}>Guardar</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -329,7 +562,7 @@ const createStyles = (theme: Theme, isDark: boolean) =>
     },
     title: {
       fontSize: 26,
-      fontWeight: '800',
+      fontWeight: '900',
       color: theme.colors.textPrimary,
     },
     subtitle: {
@@ -360,7 +593,7 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       alignItems: 'center',
       backgroundColor: theme.colors.surface,
       borderColor: theme.colors.glassBorder,
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderRadius: theme.borderRadius.md,
       paddingHorizontal: theme.spacing.md,
       height: 48,
@@ -380,8 +613,8 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       alignItems: 'center',
       backgroundColor: theme.colors.surface,
       borderColor: theme.colors.glassBorder,
-      borderWidth: 1,
-      borderRadius: theme.borderRadius.md,
+      borderWidth: 1.5,
+      borderRadius: theme.borderRadius.xl,
       padding: theme.spacing.md,
       marginBottom: theme.spacing.md,
       ...theme.shadows.card,
@@ -397,83 +630,193 @@ const createStyles = (theme: Theme, isDark: boolean) =>
     },
     avatarText: {
       color: '#FFF',
-      fontWeight: '800',
+      fontWeight: '900',
       fontSize: 18,
     },
     employeeInfo: {
       flex: 1,
     },
+    nameStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
     employeeName: {
       fontSize: 15,
-      fontWeight: '700',
+      fontWeight: '800',
       color: theme.colors.textPrimary,
+    },
+    statusBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: theme.borderRadius.full,
+    },
+    statusBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
     },
     employeeDetails: {
       fontSize: 12,
       color: theme.colors.textSecondary,
       marginTop: 2,
     },
-    resetPinBtn: {
-      padding: 8,
-      marginRight: 6,
+    employeeEmail: {
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      marginTop: 1,
     },
-    statusBadge: {
+    cardActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    actionIconButton: {
       padding: 8,
-      borderRadius: theme.borderRadius.full,
+      borderRadius: theme.borderRadius.sm,
     },
 
     // Modal Styles
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.7)',
+      backgroundColor: 'rgba(0,0,0,0.75)',
       justifyContent: 'center',
-      padding: theme.spacing.lg,
+      padding: theme.spacing.md,
     },
     modalCard: {
       backgroundColor: theme.colors.surface,
       borderColor: theme.colors.glassBorder,
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderRadius: theme.borderRadius.xl,
-      padding: theme.spacing.xl,
+      padding: theme.spacing.lg,
+      maxHeight: '90%',
       ...theme.shadows.card,
     },
     modalHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: theme.spacing.lg,
-    },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: '800',
-      color: theme.colors.textPrimary,
-    },
-    modalInput: {
-      backgroundColor: isDark ? theme.colors.surfaceHover : '#F8FAFC',
-      borderColor: theme.colors.glassBorder,
-      borderWidth: 1,
-      borderRadius: theme.borderRadius.md,
-      paddingHorizontal: theme.spacing.md,
-      height: 50,
-      color: theme.colors.textPrimary,
-      fontSize: 14,
       marginBottom: theme.spacing.md,
     },
-    submitModalBtn: {
-      marginTop: theme.spacing.md,
-      borderRadius: theme.borderRadius.md,
-      overflow: 'hidden',
-      ...theme.shadows.glowPrimary,
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
     },
-    submitModalGradient: {
-      height: 50,
+    closeModalBtn: {
+      padding: 4,
+    },
+    modalScrollView: {
+      marginTop: 4,
+    },
+    formRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 6,
+    },
+    formCol: {
+      flex: 1,
+    },
+    fieldLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      marginBottom: 6,
+      letterSpacing: 0.5,
+    },
+    modalInput: {
+      backgroundColor: isDark ? '#1A2538' : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1.5,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: 12,
+      height: 44,
+      color: theme.colors.textPrimary,
+      fontSize: 13,
+      marginBottom: 10,
+    },
+    selectPickerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: isDark ? '#1A2538' : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1.5,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: 12,
+      height: 44,
+      marginBottom: 10,
+    },
+    selectPickerBtnText: {
+      fontSize: 13,
+      color: theme.colors.textPrimary,
+      fontWeight: '600',
+      flex: 1,
+    },
+    schedulesDropdown: {
+      backgroundColor: isDark ? '#1A2538' : '#FFFFFF',
+      borderColor: theme.colors.cyan,
+      borderWidth: 1.5,
+      borderRadius: theme.borderRadius.md,
+      padding: 6,
+      marginBottom: 14,
+      marginTop: -4,
+      ...theme.shadows.card,
+    },
+    scheduleItemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: theme.borderRadius.sm,
+    },
+    scheduleItemRowActive: {
+      backgroundColor: isDark ? 'rgba(0,212,255,0.15)' : 'rgba(2,132,199,0.12)',
+    },
+    scheduleItemText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    scheduleItemTextActive: {
+      color: theme.colors.cyan,
+      fontWeight: '800',
+    },
+    modalActionsRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 12,
+      marginTop: 12,
+      marginBottom: 6,
+    },
+    modalCancelBtn: {
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+      borderWidth: 1.5,
+      borderColor: theme.colors.glassBorder,
       justifyContent: 'center',
       alignItems: 'center',
     },
-    submitModalText: {
-      color: '#FFF',
-      fontWeight: '800',
-      fontSize: 14,
-      letterSpacing: 1,
+    modalCancelBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    modalSaveBtn: {
+      paddingHorizontal: 24,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: '#00D4FF',
+      justifyContent: 'center',
+      alignItems: 'center',
+      ...theme.shadows.glowPrimary,
+    },
+    modalSaveBtnText: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: '#050A14',
+      letterSpacing: 0.5,
     },
   });

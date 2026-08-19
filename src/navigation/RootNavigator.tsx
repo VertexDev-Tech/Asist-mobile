@@ -18,6 +18,7 @@ import { AdminSchedulesScreen } from '../screens/admin/AdminSchedulesScreen';
 import { AdminDevicesScreen } from '../screens/admin/AdminDevicesScreen';
 import { AdminAlertsScreen } from '../screens/admin/AdminAlertsScreen';
 import { AdminCompanyScreen } from '../screens/admin/AdminCompanyScreen';
+import { SuperAdminCompaniesScreen } from '../screens/admin/SuperAdminCompaniesScreen';
 import {
   Clock,
   Calendar,
@@ -26,6 +27,8 @@ import {
   Users,
   BarChart2,
   ShieldCheck,
+  Building2,
+  Crown,
 } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -66,7 +69,7 @@ const EmployeeTabs = () => {
         name="Historial"
         component={HistoryScreen}
         options={{
-          tabBarLabel: 'Historial',
+          tabBarLabel: 'Mi Historial',
           tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} />,
         }}
       />
@@ -83,7 +86,9 @@ const EmployeeTabs = () => {
 };
 
 const AdminTabs = () => {
+  const { user } = useAuth();
   const { theme } = useTheme();
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <Tab.Navigator
@@ -112,6 +117,16 @@ const AdminTabs = () => {
           tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} />,
         }}
       />
+      {isSuperAdmin && (
+        <Tab.Screen
+          name="SuperAdminEmpresas"
+          component={SuperAdminCompaniesScreen}
+          options={{
+            tabBarLabel: 'Empresas',
+            tabBarIcon: ({ color, size }) => <Building2 color={color} size={size} />,
+          }}
+        />
+      )}
       <Tab.Screen
         name="AdminEmpleados"
         component={AdminEmployeesScreen}
@@ -194,6 +209,7 @@ export const RootNavigator = () => {
         ) : isAdmin ? (
           <>
             <Stack.Screen name="AdminApp" component={AdminTabs} />
+            <Stack.Screen name="SuperAdminCompanies" component={SuperAdminCompaniesScreen} />
             <Stack.Screen name="AdminSchedules" component={AdminSchedulesScreen} />
             <Stack.Screen name="AdminDevices" component={AdminDevicesScreen} />
             <Stack.Screen name="AdminAlerts" component={AdminAlertsScreen} />
