@@ -44,7 +44,7 @@ export const ReclamacionesScreen = () => {
         contacto: contacto.trim() || undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('¡Enviado con Éxito! 🎉', 'Tu solicitud ha sido registrada para revisión por el equipo de RRHH.');
+      Alert.alert('Enviado con Éxito', 'Tu solicitud ha sido registrada para revisión por el equipo de RRHH.');
       setDetalle('');
       setContacto('');
     } catch (e) {

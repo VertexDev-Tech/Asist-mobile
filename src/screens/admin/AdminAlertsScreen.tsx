@@ -6,18 +6,30 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { MotiView } from 'moti';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Theme } from '../../theme/theme';
 import { useTheme } from '../../context/ThemeContext';
-import { attendanceApi } from '../../services/api';
-import { AlertTriangle, CheckCircle } from 'lucide-react-native';
+import { useAlert } from '../../context/AlertContext';
+import { attendanceApi, alertsApi, notificationsApi } from '../../services/api';
+import { NotificationStatus } from '../../types';
+import { AlertTriangle, CheckCircle, Send, Users } from 'lucide-react-native';
 
 export const AdminAlertsScreen = () => {
   const { theme, isDark } = useTheme();
+  const { showSuccess, showError } = useAlert();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [alertsList, setAlertsList] = useState<any[]>([]);
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [notifStatus, setNotifStatus] = useState<NotificationStatus | null>(null);
+  const [broadcastTitle, setBroadcastTitle] = useState('UBIX CONTROL');
+  const [broadcastMessage, setBroadcastMessage] = useState('Recuerda marcar tu asistencia hoy.');
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
@@ -28,13 +40,51 @@ export const AdminAlertsScreen = () => {
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const data = await attendanceApi.getAlerts();
-      setAlertsList(data || []);
+      const [alertData, statusData] = await Promise.all([
+        attendanceApi.getAlerts(),
+        notificationsApi.getStatus().catch(() => null),
+      ]);
+      setAlertsList(alertData || []);
+      setNotifStatus(statusData);
     } catch (e) {
       console.log('Error loading alerts:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleReview = async (alertId: number) => {
+    try {
+      setReviewingId(alertId);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await alertsApi.review(alertId);
+      setAlertsList((prev) => prev.filter((a) => a.id !== alertId));
+      showSuccess('Alerta Revisada', 'La alerta fue marcada como revisada.');
+    } catch (e) {
+      showError('Error', 'No se pudo marcar la alerta como revisada.');
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastMessage.trim()) {
+      showError('Mensaje requerido', 'Escribe el mensaje a enviar.');
+      return;
+    }
+    try {
+      setIsSendingBroadcast(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const res = await notificationsApi.broadcast(broadcastTitle.trim(), broadcastMessage.trim());
+      showSuccess(
+        '¡Notificación Enviada!',
+        `Se envió a ${res.sent} de ${res.withToken} colaboradores con notificaciones activas.`,
+      );
+    } catch (e) {
+      showError('Error', 'No se pudo enviar la notificación.');
+    } finally {
+      setIsSendingBroadcast(false);
     }
   };
 
@@ -64,6 +114,69 @@ export const AdminAlertsScreen = () => {
       <Text style={styles.title}>Alertas & Incidencias</Text>
       <Text style={styles.subtitle}>Supervisión de anomalías de geocerca y asistencia</Text>
 
+      {/* Broadcast Notification Card */}
+      <MotiView
+        from={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'timing', duration: 400 }}
+        style={styles.broadcastCard}
+      >
+        <View style={styles.broadcastHeaderRow}>
+          <Send color={theme.colors.cyan} size={18} />
+          <Text style={styles.broadcastTitle}>NOTIFICACIONES PUSH</Text>
+        </View>
+
+        {notifStatus && (
+          <View style={styles.notifStatusRow}>
+            <Users color={theme.colors.textMuted} size={14} />
+            <Text style={styles.notifStatusText}>
+              {notifStatus.withToken} de {notifStatus.total} colaboradores con notificaciones activas
+            </Text>
+          </View>
+        )}
+
+        <TextInput
+          style={styles.broadcastInput}
+          placeholder="Título"
+          placeholderTextColor={theme.colors.textMuted}
+          value={broadcastTitle}
+          onChangeText={setBroadcastTitle}
+        />
+        <TextInput
+          style={[styles.broadcastInput, styles.broadcastTextArea]}
+          placeholder="Mensaje a enviar..."
+          placeholderTextColor={theme.colors.textMuted}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          value={broadcastMessage}
+          onChangeText={setBroadcastMessage}
+        />
+
+        <TouchableOpacity
+          style={styles.broadcastBtnWrapper}
+          onPress={handleBroadcast}
+          disabled={isSendingBroadcast}
+          activeOpacity={0.85}
+        >
+          <LinearGradient colors={theme.colors.gradients.cyan} style={styles.broadcastBtn}>
+            {isSendingBroadcast ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Send color="#FFF" size={16} />
+                <Text style={styles.broadcastBtnText}>ENVIAR A TODOS</Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      </MotiView>
+
+      <View style={styles.sectionDivider}>
+        <AlertTriangle color={theme.colors.amber} size={16} />
+        <Text style={styles.sectionDividerText}>ALERTAS PENDIENTES</Text>
+      </View>
+
       {alertsList && alertsList.length > 0 ? (
         alertsList.map((alertItem, index) => (
           <MotiView
@@ -90,6 +203,19 @@ export const AdminAlertsScreen = () => {
                   : 'Reciente'}
               </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.reviewBtn}
+              onPress={() => handleReview(alertItem.id)}
+              disabled={reviewingId === alertItem.id}
+              activeOpacity={0.8}
+            >
+              {reviewingId === alertItem.id ? (
+                <ActivityIndicator size="small" color={theme.colors.emerald} />
+              ) : (
+                <CheckCircle color={theme.colors.emerald} size={20} />
+              )}
+            </TouchableOpacity>
           </MotiView>
         ))
       ) : (
@@ -129,6 +255,85 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       color: theme.colors.textSecondary,
       marginBottom: theme.spacing.lg,
       marginTop: 2,
+    },
+    broadcastCard: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      ...theme.shadows.card,
+    },
+    broadcastHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    broadcastTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+      letterSpacing: 0.8,
+    },
+    notifStatusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 12,
+    },
+    notifStatusText: {
+      fontSize: 11.5,
+      color: theme.colors.textMuted,
+    },
+    broadcastInput: {
+      backgroundColor: isDark ? theme.colors.surfaceHover : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 44,
+      color: theme.colors.textPrimary,
+      fontSize: 13,
+      marginBottom: 10,
+    },
+    broadcastTextArea: {
+      height: 80,
+      paddingTop: 10,
+    },
+    broadcastBtnWrapper: {
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      ...theme.shadows.glowPrimary,
+    },
+    broadcastBtn: {
+      flexDirection: 'row',
+      height: 46,
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 8,
+    },
+    broadcastBtnText: {
+      color: '#FFF',
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+    },
+    sectionDivider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: theme.spacing.md,
+    },
+    sectionDividerText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      letterSpacing: 1,
+    },
+    reviewBtn: {
+      padding: 8,
     },
     alertCard: {
       flexDirection: 'row',

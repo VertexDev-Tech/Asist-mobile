@@ -105,7 +105,7 @@ export const LoginScreen = () => {
   ) => {
     if (isBiometricAvailable && !hasSavedBiometrics) {
       Alert.alert(
-        '🔐 Activar Acceso Biométrico',
+        'Activar Acceso Biométrico',
         '¿Deseas guardar tus credenciales para ingresar con FaceID o Huella digital la próxima vez?',
         [
           { text: 'Ahora no', style: 'cancel' },

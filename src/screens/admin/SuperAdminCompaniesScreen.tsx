@@ -142,7 +142,7 @@ export const SuperAdminCompaniesScreen = () => {
       else if (type === 'expired') await superAdminApi.notifyExpired(company.id);
       else await superAdminApi.notifyPayment(company.id);
 
-      showSuccess('Correo Enviado ✉️', `Notificación despachada con éxito a ${company.email_admin}`);
+      showSuccess('Correo Enviado', `Notificación despachada con éxito a ${company.email_admin}`);
     } catch (e: any) {
       showError('Error', 'No se pudo enviar la notificación por correo.');
     } finally {

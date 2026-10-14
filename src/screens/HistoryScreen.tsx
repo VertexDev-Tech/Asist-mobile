@@ -12,7 +12,17 @@ import { Theme } from '../theme/theme';
 import { useTheme } from '../context/ThemeContext';
 import { attendanceApi } from '../services/api';
 
-import { Clock, AlertTriangle, Flame } from 'lucide-react-native';
+import {
+  Clock,
+  Clock3,
+  AlertTriangle,
+  AlertCircle,
+  Flame,
+  Calendar,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle2,
+} from 'lucide-react-native';
 
 const DAYS_SHORT = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 const DAYS_SINGLE = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
@@ -251,12 +261,18 @@ export const HistoryScreen = () => {
         transition={{ type: 'timing', duration: 400, delay: 250 }}
         style={styles.balanceCard}
       >
-        <Text style={styles.balanceTitle}>📅 BALANCE DEL MES ACTUAL</Text>
+        <View style={styles.balanceHeaderRow}>
+          <Calendar size={14} color={theme.colors.cyan} />
+          <Text style={styles.balanceTitle}>BALANCE DEL MES ACTUAL</Text>
+        </View>
 
         {/* Horas Extras */}
         <View style={styles.balanceRow}>
           <View style={styles.balanceMeta}>
-            <Text style={styles.balanceLabel}>⬆️ Horas Extras</Text>
+            <View style={styles.balanceLabelGroup}>
+              <TrendingUp size={13} color={theme.colors.emerald} />
+              <Text style={styles.balanceLabel}>Horas Extras</Text>
+            </View>
             <Text style={styles.balanceValue}>{hoursStats?.extras_fmt || '0h 00m'}</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -275,7 +291,10 @@ export const HistoryScreen = () => {
         {/* Horas Falta */}
         <View style={styles.balanceRow}>
           <View style={styles.balanceMeta}>
-            <Text style={styles.balanceLabel}>⬇️ Horas Falta</Text>
+            <View style={styles.balanceLabelGroup}>
+              <TrendingDown size={13} color={theme.colors.rose} />
+              <Text style={styles.balanceLabel}>Horas Falta</Text>
+            </View>
             <Text style={styles.balanceValue}>{hoursStats?.falta_fmt || '0h 00m'}</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -294,7 +313,10 @@ export const HistoryScreen = () => {
         {/* Tardanzas */}
         <View style={[styles.balanceRow, { marginBottom: 0 }]}>
           <View style={styles.balanceMeta}>
-            <Text style={styles.balanceLabel}>⏰ Tardanzas</Text>
+            <View style={styles.balanceLabelGroup}>
+              <Clock3 size={13} color={theme.colors.orange} />
+              <Text style={styles.balanceLabel}>Tardanzas</Text>
+            </View>
             <Text style={styles.balanceValue}>{hoursStats?.tardanza_fmt || '0h 00m'}</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -330,23 +352,27 @@ export const HistoryScreen = () => {
       }
     }
 
-    // Badge styling matching the web app
-    let badgeText = '✅ A tiempo';
+    // Professional Badge styling matching the web app
+    let badgeLabel = 'A tiempo';
     let badgeBg = isDark ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7';
     let badgeTextColor = isDark ? theme.colors.emerald : '#166534';
+    let BadgeIcon = CheckCircle2;
 
     if (noMark) {
-      badgeText = 'Sin marcar';
+      badgeLabel = 'Sin marcar';
       badgeBg = isDark ? 'rgba(255, 255, 255, 0.08)' : '#F3F4F6';
       badgeTextColor = isDark ? theme.colors.textMuted : '#6B7280';
+      BadgeIcon = AlertCircle;
     } else if (isLate) {
-      badgeText = '⏰ Tarde';
+      badgeLabel = 'Tarde';
       badgeBg = isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7';
       badgeTextColor = isDark ? theme.colors.orange : '#92400E';
+      BadgeIcon = Clock3;
     } else if (!checkOut) {
-      badgeText = '🟡 Incompleto';
+      badgeLabel = 'Incompleto';
       badgeBg = isDark ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7';
       badgeTextColor = isDark ? theme.colors.orange : '#92400E';
+      BadgeIcon = AlertCircle;
     }
 
     return (
@@ -379,7 +405,8 @@ export const HistoryScreen = () => {
 
         {/* Status Badge */}
         <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-          <Text style={[styles.badgeText, { color: badgeTextColor }]}>{badgeText}</Text>
+          <BadgeIcon size={11} color={badgeTextColor} />
+          <Text style={[styles.badgeText, { color: badgeTextColor }]}>{badgeLabel}</Text>
         </View>
       </MotiView>
     );
@@ -550,12 +577,17 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       marginBottom: theme.spacing.lg,
       ...theme.shadows.card,
     },
+    balanceHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: theme.spacing.md,
+    },
     balanceTitle: {
       fontSize: 12,
       fontWeight: '800',
       color: theme.colors.textPrimary,
       letterSpacing: 0.8,
-      marginBottom: theme.spacing.md,
     },
     balanceRow: {
       marginBottom: 14,
@@ -565,6 +597,11 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 6,
+    },
+    balanceLabelGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     balanceLabel: {
       fontSize: 13,
@@ -642,8 +679,11 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       color: theme.colors.textPrimary,
     },
     badge: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
       borderRadius: 8,
     },
     badgeText: {

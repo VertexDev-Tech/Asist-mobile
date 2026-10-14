@@ -13,14 +13,17 @@ import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
 import { Theme } from '../../theme/theme';
 import { useTheme } from '../../context/ThemeContext';
+import { useAlert } from '../../context/AlertContext';
 import { devicesApi } from '../../services/api';
-import { Smartphone, ShieldCheck, MapPin, Check } from 'lucide-react-native';
+import { Smartphone, ShieldCheck, MapPin, Check, XCircle } from 'lucide-react-native';
 
 export const AdminDevicesScreen = () => {
   const { theme, isDark } = useTheme();
+  const { showConfirm, showSuccess, showError } = useAlert();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDevices, setPendingDevices] = useState<any[]>([]);
+  const [authorizedDevices, setAuthorizedDevices] = useState<any[]>([]);
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
@@ -31,10 +34,14 @@ export const AdminDevicesScreen = () => {
   const loadDevices = async () => {
     try {
       setLoading(true);
-      const data = await devicesApi.getPending();
-      setPendingDevices(data || []);
+      const [pending, authorized] = await Promise.all([
+        devicesApi.getPending().catch(() => []),
+        devicesApi.getAuthorized().catch(() => []),
+      ]);
+      setPendingDevices(pending || []);
+      setAuthorizedDevices(authorized || []);
     } catch (e) {
-      console.log('Error loading pending devices:', e);
+      console.log('Error loading devices:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -52,6 +59,24 @@ export const AdminDevicesScreen = () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', 'No se pudo autorizar el dispositivo.');
     }
+  };
+
+  const handleRevoke = (id: number, employeeName: string) => {
+    showConfirm(
+      'Revocar Dispositivo',
+      `¿Deseas revocar el acceso del celular vinculado a "${employeeName}"? Deberá volver a solicitar autorización.`,
+      async () => {
+        try {
+          await devicesApi.revoke(id);
+          showSuccess('Dispositivo Revocado', `Se revocó el acceso del celular de ${employeeName}.`);
+          loadDevices();
+        } catch (e) {
+          showError('Error', 'No se pudo revocar el dispositivo.');
+        }
+      },
+      'Revocar',
+      true,
+    );
   };
 
   if (loading && !refreshing) {
@@ -140,6 +165,49 @@ export const AdminDevicesScreen = () => {
         <View style={styles.emptyContainer}>
           <ShieldCheck color={theme.colors.emerald} size={32} />
           <Text style={styles.emptyText}>No hay celulares pendientes de autorización.</Text>
+        </View>
+      )}
+
+      {/* Authorized Devices Header */}
+      <View style={[styles.sectionHeader, { marginTop: theme.spacing.lg }]}>
+        <ShieldCheck color={theme.colors.emerald} size={18} />
+        <Text style={styles.sectionTitle}>CELULARES AUTORIZADOS</Text>
+      </View>
+
+      {authorizedDevices && authorizedDevices.length > 0 ? (
+        authorizedDevices.map((device, index) => (
+          <MotiView
+            key={device.id || index}
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 350, delay: index * 50 }}
+            style={styles.deviceCard}
+          >
+            <View style={[styles.deviceIconCircle, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.12)' }]}>
+              <Smartphone color={theme.colors.emerald} size={22} />
+            </View>
+
+            <View style={styles.deviceInfo}>
+              <Text style={styles.employeeName}>
+                {device.employee?.full_name || 'Empleado'}
+              </Text>
+              <Text style={styles.deviceModel}>
+                {device.model || 'Teléfono Móvil'} ({device.fingerprint ? device.fingerprint.slice(0, 14) : 'ANDROID'})
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.revokeBtn}
+              onPress={() => handleRevoke(device.id, device.employee?.full_name || 'Empleado')}
+            >
+              <XCircle color={theme.colors.rose} size={16} />
+              <Text style={styles.revokeBtnText}>REVOCAR</Text>
+            </TouchableOpacity>
+          </MotiView>
+        ))
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Aún no hay celulares autorizados.</Text>
         </View>
       )}
     </ScrollView>
@@ -266,6 +334,22 @@ const createStyles = (theme: Theme, isDark: boolean) =>
     },
     authorizeBtnText: {
       color: '#050A14',
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    revokeBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.08)',
+      borderWidth: 1.5,
+      borderColor: theme.colors.rose,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: theme.borderRadius.md,
+    },
+    revokeBtnText: {
+      color: theme.colors.rose,
       fontSize: 11,
       fontWeight: '800',
     },

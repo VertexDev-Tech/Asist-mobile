@@ -39,14 +39,22 @@
         "ACCESS_BACKGROUND_LOCATION",
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",
+        "POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION"
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UBIX requiere acceso a tus fotos para subir el logo de la empresa y las fotos de colaboradores."
+        }
+      ],
       [
         "expo-camera",
         {
@@ -59,15 +67,19 @@
           "locationAlwaysAndWhenInUsePermission": "UBIX requiere tu ubicación para validar la presencia en la oficina."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "5b831420-cf90-4010-b547-7aaa1040ffdf"
+        "projectId": "dd9c437b-1a95-460f-97cf-64e31d8ed7b0"
       }
-    }
+    },
+    "owner": "giampe"
   }
 }

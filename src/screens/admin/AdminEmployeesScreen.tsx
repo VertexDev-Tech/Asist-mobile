@@ -12,15 +12,17 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { Theme } from '../../theme/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { useAlert } from '../../context/AlertContext';
-import { employeesApi, schedulesApi } from '../../services/api';
-import { EmployeeItem } from '../../types';
+import { employeesApi, schedulesApi, overtimeBankApi, assetUrl } from '../../services/api';
+import { EmployeeItem, OvertimeBankSummary } from '../../types';
 import {
   Search,
   UserCheck,
@@ -36,6 +38,8 @@ import {
   Phone,
   Hash,
   Check,
+  Wallet,
+  Camera,
 } from 'lucide-react-native';
 
 export const AdminEmployeesScreen = () => {
@@ -51,6 +55,7 @@ export const AdminEmployeesScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form Fields (100% Web Parity)
@@ -63,6 +68,15 @@ export const AdminEmployeesScreen = () => {
 
   // Dropdown Picker State
   const [schedulePickerVisible, setSchedulePickerVisible] = useState(false);
+
+  // Overtime Bank Modal State
+  const [bankModalVisible, setBankModalVisible] = useState(false);
+  const [bankTarget, setBankTarget] = useState<EmployeeItem | null>(null);
+  const [bankSummary, setBankSummary] = useState<OvertimeBankSummary | null>(null);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankHours, setBankHours] = useState('0');
+  const [bankMinutes, setBankMinutes] = useState('0');
+  const [bankNote, setBankNote] = useState('');
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
@@ -132,7 +146,7 @@ export const AdminEmployeesScreen = () => {
           schedule_id: scheduleId || undefined,
         });
 
-        showSuccess('¡Colaborador Actualizado! ✅', `Los datos de "${fullName}" fueron guardados.`);
+        showSuccess('Colaborador Actualizado', `Los datos de "${fullName}" fueron guardados.`);
       } else {
         await employeesApi.create({
           full_name: fullName.trim(),
@@ -142,7 +156,7 @@ export const AdminEmployeesScreen = () => {
           position: position.trim() || 'Colaborador',
           schedule_id: scheduleId || undefined,
         });
-        showSuccess('¡Colaborador Registrado! 🎉', `"${fullName}" ha sido agregado con éxito.`);
+        showSuccess('Colaborador Registrado', `"${fullName}" ha sido agregado con éxito.`);
       }
 
       setModalVisible(false);
@@ -152,6 +166,36 @@ export const AdminEmployeesScreen = () => {
       showError('Error al guardar', Array.isArray(msg) ? msg.join('\n') : String(msg));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    if (!editingEmployeeId) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        showError('Permiso denegado', 'Se requiere acceso a tus fotos para elegir la imagen.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      setIsUploadingPhoto(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await employeesApi.uploadPhoto(editingEmployeeId, asset.uri, asset.mimeType);
+      showSuccess('Foto Actualizada', 'La foto del colaborador fue guardada.');
+      loadData();
+    } catch (e: any) {
+      const msg = e.response?.data?.message;
+      showError('Error', typeof msg === 'string' ? msg : 'No se pudo subir la foto.');
+    } finally {
+      setIsUploadingPhoto(false);
     }
   };
 
@@ -199,6 +243,44 @@ export const AdminEmployeesScreen = () => {
       'Solo números (4 a 6 dígitos)',
       'number-pad',
     );
+  };
+
+  const handleOpenBank = async (item: EmployeeItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBankTarget(item);
+    setBankSummary(null);
+    setBankHours('0');
+    setBankMinutes('0');
+    setBankNote('');
+    setBankModalVisible(true);
+    try {
+      setBankLoading(true);
+      const summary = await overtimeBankApi.getForEmployee(item.id);
+      setBankSummary(summary);
+    } catch (e) {
+      showError('Error', 'No se pudo cargar el banco de horas del colaborador.');
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  const handleSaveBank = async () => {
+    if (!bankTarget) return;
+    try {
+      setIsSubmitting(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await overtimeBankApi.setPreviousMonth(bankTarget.id, {
+        hours: Number(bankHours) || 0,
+        minutes: Number(bankMinutes) || 0,
+        note: bankNote.trim() || undefined,
+      });
+      showSuccess('¡Banco de Horas Actualizado!', `Se guardó el saldo del mes anterior de ${bankTarget.full_name}.`);
+      setBankModalVisible(false);
+    } catch (e) {
+      showError('Error', 'No se pudo actualizar el banco de horas.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const selectedScheduleName = useMemo(() => {
@@ -262,10 +344,23 @@ export const AdminEmployeesScreen = () => {
         transition={{ type: 'timing', duration: 350, delay: index * 30 }}
         style={[styles.employeeCard, !isActive && { opacity: 0.65 }]}
       >
-        <View style={[styles.avatarCircle, !isActive && { backgroundColor: theme.colors.textMuted }]}>
-          <Text style={styles.avatarText}>
-            {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'E'}
-          </Text>
+        <View
+          style={[
+            styles.avatarCircle,
+            !isActive && { backgroundColor: theme.colors.textMuted },
+            { overflow: 'hidden' },
+          ]}
+        >
+          {item.photo_url ? (
+            <Image
+              source={{ uri: assetUrl(item.photo_url) as string }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          ) : (
+            <Text style={styles.avatarText}>
+              {item.full_name ? item.full_name.charAt(0).toUpperCase() : 'E'}
+            </Text>
+          )}
         </View>
 
         <View style={styles.employeeInfo}>
@@ -316,6 +411,15 @@ export const AdminEmployeesScreen = () => {
             activeOpacity={0.7}
           >
             <KeyRound color={theme.colors.amber} size={18} />
+          </TouchableOpacity>
+
+          {/* Banco de Horas */}
+          <TouchableOpacity
+            style={styles.actionIconButton}
+            onPress={() => handleOpenBank(item)}
+            activeOpacity={0.7}
+          >
+            <Wallet color={theme.colors.violet} size={18} />
           </TouchableOpacity>
 
           {/* Dar de baja / Reactivar */}
@@ -384,6 +488,37 @@ export const AdminEmployeesScreen = () => {
             </View>
 
             <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+              {/* Foto del colaborador (solo al editar: el endpoint requiere el id) */}
+              {isEditing && editingEmployeeId && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    paddingVertical: 12,
+                    marginBottom: 14,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: theme.colors.cyan,
+                  }}
+                  onPress={handlePickPhoto}
+                  disabled={isUploadingPhoto}
+                  activeOpacity={0.8}
+                >
+                  {isUploadingPhoto ? (
+                    <ActivityIndicator size="small" color={theme.colors.cyan} />
+                  ) : (
+                    <>
+                      <Camera color={theme.colors.cyan} size={18} />
+                      <Text style={{ color: theme.colors.cyan, fontWeight: '800', fontSize: 12 }}>
+                        CAMBIAR FOTO DEL COLABORADOR
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
               {/* Row 1: Nombre Completo & DNI */}
               <View style={styles.formRow}>
                 <View style={styles.formCol}>
@@ -530,6 +665,101 @@ export const AdminEmployeesScreen = () => {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Overtime Bank (Banco de Horas) Modal */}
+      <Modal visible={bankModalVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Banco de Horas</Text>
+              <TouchableOpacity onPress={() => setBankModalVisible(false)}>
+                <X color={theme.colors.textMuted} size={20} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.bankEmployeeName}>{bankTarget?.full_name}</Text>
+
+            {bankLoading ? (
+              <ActivityIndicator color={theme.colors.cyan} style={{ marginVertical: 20 }} />
+            ) : (
+              <>
+                <View style={styles.bankSummaryRow}>
+                  <View style={styles.bankSummaryCol}>
+                    <Text style={styles.bankSummaryLabel}>Mes anterior</Text>
+                    <Text style={styles.bankSummaryValue}>
+                      {bankSummary?.prevMonth?.formatted ?? '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.bankSummaryCol}>
+                    <Text style={styles.bankSummaryLabel}>Mes actual</Text>
+                    <Text style={styles.bankSummaryValue}>
+                      {bankSummary?.currentMonth?.formatted ?? '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.bankSummaryCol}>
+                    <Text style={styles.bankSummaryLabel}>Saldo Total</Text>
+                    <Text style={[styles.bankSummaryValue, { color: theme.colors.cyan }]}>
+                      {bankSummary?.total?.formatted ?? '—'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.fieldLabel}>AJUSTAR SALDO DEL MES ANTERIOR</Text>
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>HORAS</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      keyboardType="number-pad"
+                      value={bankHours}
+                      onChangeText={setBankHours}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Text style={styles.fieldLabel}>MINUTOS</Text>
+                    <TextInput
+                      style={styles.modalInput}
+                      keyboardType="number-pad"
+                      value={bankMinutes}
+                      onChangeText={setBankMinutes}
+                    />
+                  </View>
+                </View>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Nota (opcional)"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={bankNote}
+                  onChangeText={setBankNote}
+                />
+
+                <View style={styles.modalActionsRow}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setBankModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelBtnText}>Cerrar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalSaveBtn}
+                    onPress={handleSaveBank}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator color="#050A14" />
+                    ) : (
+                      <Text style={styles.modalSaveBtnText}>Guardar</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -818,5 +1048,37 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       fontWeight: '900',
       color: '#050A14',
       letterSpacing: 0.5,
+    },
+
+    // Overtime Bank Modal
+    bankEmployeeName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      marginBottom: 14,
+      marginTop: -4,
+    },
+    bankSummaryRow: {
+      flexDirection: 'row',
+      backgroundColor: isDark ? '#1A2538' : '#F8FAFC',
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+    },
+    bankSummaryCol: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    bankSummaryLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    bankSummaryValue: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+      marginTop: 4,
     },
   });

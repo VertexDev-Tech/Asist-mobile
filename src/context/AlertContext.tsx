@@ -346,7 +346,7 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       padding: theme.spacing.lg,
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     card: {
       width: '100%',

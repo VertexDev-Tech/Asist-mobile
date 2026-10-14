@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -26,6 +27,7 @@ import { Theme } from '../theme/theme';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { attendanceApi } from '../services/api';
+import { CyberWolfSprite } from '../components/CyberWolfSprite';
 import {
   MapPin,
   Clock,
@@ -36,9 +38,6 @@ import {
   Navigation,
   Sun,
   Moon,
-  Bell,
-  AlarmClock,
-  Briefcase,
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -59,12 +58,6 @@ export const HomeScreen = () => {
   const [isWithinZone, setIsWithinZone] = useState<boolean>(false);
   const [nextActionType, setNextActionType] = useState<'ENTRADA' | 'SALIDA'>('ENTRADA');
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
-  const [expectedExitTime, setExpectedExitTime] = useState<string | null>(null);
-
-  // Exit Alarm States
-  const [alarmModalVisible, setAlarmModalVisible] = useState(false);
-  const [alarmDismissed, setAlarmDismissed] = useState(false);
-  const [snoozedUntil, setSnoozedUntil] = useState<number | null>(null);
 
   // Success Modal
   const [successVisible, setSuccessVisible] = useState(false);
@@ -84,27 +77,6 @@ export const HomeScreen = () => {
     loadLocation();
     fetchTodayStatus();
   }, []);
-
-  // Detector inteligente de hora de salida programada
-  useEffect(() => {
-    if (nextActionType === 'SALIDA' && expectedExitTime && !alarmDismissed) {
-      const [eh, em] = expectedExitTime.split(':').map(Number);
-      const nowHours = currentTime.getHours();
-      const nowMinutes = currentTime.getMinutes();
-      const nowTotalMins = nowHours * 60 + nowMinutes;
-      const exitTotalMins = (eh || 18) * 60 + (em || 0);
-
-      // Si llegó la hora o ya pasó y no está en snooze
-      if (nowTotalMins >= exitTotalMins && !alarmModalVisible && !snoozedUntil) {
-        setAlarmModalVisible(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      } else if (snoozedUntil && currentTime.getTime() >= snoozedUntil && !alarmModalVisible) {
-        setSnoozedUntil(null);
-        setAlarmModalVisible(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      }
-    }
-  }, [currentTime, nextActionType, expectedExitTime, alarmDismissed, alarmModalVisible, snoozedUntil]);
 
   const loadLocation = async () => {
     try {
@@ -155,13 +127,6 @@ export const HomeScreen = () => {
       const data = await attendanceApi.getMyToday();
       setTodayLogs(data?.shifts || []);
 
-      const activeShift = (data?.shifts || []).find((s: any) => s.entry && !s.exit);
-      if (activeShift && activeShift.end_time) {
-        setExpectedExitTime(activeShift.end_time);
-      } else if (data?.shifts?.[0]?.end_time) {
-        setExpectedExitTime(data.shifts[0].end_time);
-      }
-
       if (data && data.proximo_turno && data.proximo_turno.accion) {
         setNextActionType(data.proximo_turno.accion);
       } else if (data && data.has_open_entrada) {
@@ -173,6 +138,10 @@ export const HomeScreen = () => {
       console.log('Error loading today status:', e);
     }
   };
+
+  // Justification Modal for Out of Zone / Special Marks
+  const [justificationModalVisible, setJustificationModalVisible] = useState(false);
+  const [outOfZoneReason, setOutOfZoneReason] = useState('');
 
   const handleOpenScanner = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -188,6 +157,18 @@ export const HomeScreen = () => {
       }
     }
 
+    if (!isWithinZone) {
+      // Prompt justification modal before camera
+      setOutOfZoneReason('');
+      setJustificationModalVisible(true);
+      return;
+    }
+
+    setCameraVisible(true);
+  };
+
+  const handleProceedWithJustification = () => {
+    setJustificationModalVisible(false);
     setCameraVisible(true);
   };
 
@@ -215,10 +196,10 @@ export const HomeScreen = () => {
         longitude: location?.coords.longitude || -78.51477,
         device_fingerprint: 'MOBILE_EXPO_DEVICE_' + (user?.id || 1),
         selfie: base64Image,
+        justification: outOfZoneReason.trim() || undefined,
       });
 
       setCameraVisible(false);
-      setAlarmModalVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setSuccessMessage(result.message || `Has registrado tu ${nextActionType} exitosamente.`);
       setSuccessVisible(true);
@@ -231,24 +212,6 @@ export const HomeScreen = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Alarm Modal Actions
-  const handleAcceptExitAlarm = async () => {
-    setAlarmModalVisible(false);
-    handleOpenScanner();
-  };
-
-  const handleSnoozeAlarm = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setAlarmModalVisible(false);
-    setSnoozedUntil(Date.now() + 5 * 60 * 1000); // Posponer 5 minutos
-  };
-
-  const handleDismissAlarm = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setAlarmModalVisible(false);
-    setAlarmDismissed(true); // Descartar por el resto de la jornada (ej. Horas extras)
   };
 
   const formattedTime = currentTime.toLocaleTimeString('es-PE', {
@@ -396,7 +359,9 @@ export const HomeScreen = () => {
         </TouchableOpacity>
       </MotiView>
 
-      {/* 🚀 Precision Chrono Dial & Dynamic Animated Progress Ring */}
+
+
+      {/* Precision Chrono Dial & Dynamic Animated Progress Ring */}
       <MotiView
         from={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -604,78 +569,6 @@ export const HomeScreen = () => {
         </View>
       </MotiView>
 
-      {/* ⏰ MODAL DE ALARMA DE HORA DE SALIDA AUTOMÁTICA */}
-      <Modal visible={alarmModalVisible} transparent animationType="slide">
-        <View style={styles.alarmOverlay}>
-          <MotiView
-            from={{ opacity: 0, scale: 0.85, translateY: 30 }}
-            animate={{ opacity: 1, scale: 1, translateY: 0 }}
-            transition={{ type: 'spring', damping: 13 }}
-            style={styles.alarmCard}
-          >
-            {/* Animated Alarm Bell Badge */}
-            <MotiView
-              from={{ rotate: '-12deg', scale: 0.95 }}
-              animate={{ rotate: '12deg', scale: 1.1 }}
-              transition={{
-                type: 'timing',
-                duration: 450,
-                loop: true,
-              }}
-              style={styles.alarmIconCircle}
-            >
-              <AlarmClock color="#00F5FF" size={44} strokeWidth={2.4} />
-            </MotiView>
-
-            <Text style={styles.alarmTitle}>¡Fin de Jornada Laboral!</Text>
-            <Text style={styles.alarmSubtitle}>
-              Tu horario de salida establecido ({expectedExitTime || 'programado'}) ha llegado.
-            </Text>
-
-            <View style={styles.alarmInfoBox}>
-              <Clock color={theme.colors.cyan} size={18} />
-              <Text style={styles.alarmInfoText}>
-                Hora actual: <Text style={styles.alarmHighlight}>{formattedTime}</Text>
-              </Text>
-            </View>
-
-            {/* Primary Action Button: Tomar Selfie y Salir */}
-            <TouchableOpacity
-              style={styles.alarmPrimaryBtn}
-              onPress={handleAcceptExitAlarm}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={['#00F5FF', '#0284C7']}
-                style={styles.alarmPrimaryBtnGradient}
-              >
-                <Camera color="#050A14" size={20} />
-                <Text style={styles.alarmPrimaryBtnText}>TOMAR SELFIE Y SALIR AHORA</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {/* Secondary Option: Posponer 5 Min */}
-            <View style={styles.alarmSecondaryRow}>
-              <TouchableOpacity
-                style={styles.alarmSecondaryBtn}
-                onPress={handleSnoozeAlarm}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.alarmSecondaryText}>⏱️ Posponer 5 min</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.alarmSecondaryBtn}
-                onPress={handleDismissAlarm}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.alarmSecondaryText}>💼 Horas Extras</Text>
-              </TouchableOpacity>
-            </View>
-          </MotiView>
-        </View>
-      </Modal>
-
       {/* Camera Modal */}
       <Modal visible={cameraVisible} animationType="slide" transparent={false}>
         <View style={styles.cameraContainer}>
@@ -723,6 +616,52 @@ export const HomeScreen = () => {
         </View>
       </Modal>
 
+      {/* Out of Zone Justification Modal */}
+      <Modal visible={justificationModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <MapPin color={theme.colors.orange} size={22} />
+                <Text style={styles.modalTitle}>Marcación Fuera de Zona</Text>
+              </View>
+              <TouchableOpacity onPress={() => setJustificationModalVisible(false)}>
+                <X color={theme.colors.textMuted} size={20} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalDesc}>
+              Te encuentras fuera del perímetro permitido ({distanceM ?? '—'} m). Ingresa el motivo de tu marcación para continuar:
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej. Visita a cliente / Trabajo en campo / Tráfico"
+              placeholderTextColor={theme.colors.textMuted}
+              value={outOfZoneReason}
+              onChangeText={setOutOfZoneReason}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setJustificationModalVisible(false)}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSaveBtn}
+                onPress={handleProceedWithJustification}
+              >
+                <Text style={styles.modalSaveBtnText}>Continuar a Foto →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Success Modal Overlay */}
       <Modal visible={successVisible} transparent animationType="fade">
         <View style={styles.successOverlay}>
@@ -732,8 +671,8 @@ export const HomeScreen = () => {
             transition={{ type: 'spring', damping: 14 }}
             style={styles.successCard}
           >
-            <View style={styles.successIconCircle}>
-              <CheckCircle2 color={theme.colors.emerald} size={48} />
+            <View style={{ marginBottom: 6 }}>
+              <CyberWolfSprite size={115} pose="celebrating" showAura floating />
             </View>
             <Text style={styles.successTitle}>¡Marcación Exitosa!</Text>
             <Text style={styles.successSubtitle}>{successMessage}</Text>
@@ -1090,111 +1029,7 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       color: theme.colors.textSecondary,
     },
 
-    // ⏰ Shift Exit Alarm Styles
-    alarmOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: theme.spacing.lg,
-    },
-    alarmCard: {
-      width: '100%',
-      maxWidth: 340,
-      backgroundColor: theme.colors.surface,
-      borderColor: 'rgba(0, 245, 255, 0.5)',
-      borderWidth: 1.5,
-      borderRadius: theme.borderRadius.xl,
-      paddingVertical: theme.spacing.xl,
-      paddingHorizontal: theme.spacing.lg,
-      alignItems: 'center',
-      ...theme.shadows.glowPrimary,
-    },
-    alarmIconCircle: {
-      width: 84,
-      height: 84,
-      borderRadius: 42,
-      backgroundColor: isDark ? 'rgba(0, 245, 255, 0.15)' : 'rgba(2, 132, 199, 0.12)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: theme.spacing.md,
-      borderWidth: 1.5,
-      borderColor: '#00F5FF',
-    },
-    alarmTitle: {
-      fontSize: 21,
-      fontWeight: '900',
-      color: theme.colors.textPrimary,
-      textAlign: 'center',
-      letterSpacing: 0.5,
-    },
-    alarmSubtitle: {
-      fontSize: 13,
-      color: theme.colors.textSecondary,
-      textAlign: 'center',
-      marginTop: 6,
-      lineHeight: 18,
-    },
-    alarmInfoBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9',
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: theme.borderRadius.md,
-      marginVertical: theme.spacing.md,
-    },
-    alarmInfoText: {
-      fontSize: 13,
-      color: theme.colors.textPrimary,
-      fontWeight: '600',
-    },
-    alarmHighlight: {
-      color: theme.colors.cyan,
-      fontWeight: '800',
-    },
-    alarmPrimaryBtn: {
-      width: '100%',
-      borderRadius: theme.borderRadius.md,
-      overflow: 'hidden',
-      marginTop: 6,
-      marginBottom: 10,
-      ...theme.shadows.glowPrimary,
-    },
-    alarmPrimaryBtnGradient: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-    },
-    alarmPrimaryBtnText: {
-      color: '#050A14',
-      fontSize: 13,
-      fontWeight: '900',
-      letterSpacing: 0.8,
-    },
-    alarmSecondaryRow: {
-      flexDirection: 'row',
-      gap: 10,
-      width: '100%',
-      justifyContent: 'center',
-      marginTop: 4,
-    },
-    alarmSecondaryBtn: {
-      flex: 1,
-      paddingVertical: 10,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    alarmSecondaryText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.colors.textPrimary,
-    },
+
 
     // Camera Modal Styles
     cameraContainer: {
@@ -1314,5 +1149,73 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       fontSize: 13,
       fontWeight: '800',
       letterSpacing: 0.8,
+    },
+
+    // Justification Modal Styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'flex-end',
+    },
+    modalCard: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: theme.borderRadius.xl,
+      borderTopRightRadius: theme.borderRadius.xl,
+      padding: theme.spacing.xl,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontWeight: '900',
+      color: theme.colors.textPrimary,
+    },
+    modalDesc: {
+      fontSize: 12.5,
+      color: theme.colors.textSecondary,
+      marginBottom: 12,
+      lineHeight: 18,
+    },
+    modalInput: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.md,
+      padding: 12,
+      color: theme.colors.textPrimary,
+      fontSize: 13,
+      marginBottom: 16,
+    },
+    modalActionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalCancelBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+    },
+    modalCancelBtnText: {
+      color: theme.colors.textPrimary,
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    modalSaveBtn: {
+      flex: 1.4,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      backgroundColor: theme.colors.cyan,
+    },
+    modalSaveBtnText: {
+      color: '#050A14',
+      fontWeight: '900',
+      fontSize: 13,
     },
   });

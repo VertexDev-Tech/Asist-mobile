@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,11 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Theme } from '../theme/theme';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -26,14 +28,53 @@ import {
   Moon,
   CreditCard,
   Building,
+  Scale,
+  Zap,
+  Clock,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle2,
+  X,
+  Bell,
+  Trophy,
+  Image as ImageIcon,
 } from 'lucide-react-native';
+import { getMyMonthlyBalance, MonthlyBalanceSummary } from '../services/balanceService';
 
 export const ProfileScreen = () => {
   const { user, logout } = useAuth();
   const { theme, isDark, setThemeMode } = useTheme();
   const navigation = useNavigation<any>();
 
+  const [balance, setBalance] = useState<MonthlyBalanceSummary | null>(null);
+  const [loadingBalance, setLoadingBalance] = useState<boolean>(true);
+  const [balanceModalVisible, setBalanceModalVisible] = useState<boolean>(false);
+
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+
+  const loadBalance = useCallback(async () => {
+    try {
+      setLoadingBalance(true);
+      const data = await getMyMonthlyBalance();
+      setBalance(data);
+    } catch (err) {
+      console.log('Error loading monthly balance:', err);
+    } finally {
+      setLoadingBalance(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBalance();
+    }, [loadBalance]),
+  );
+
+  const handleManualRefresh = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    loadBalance();
+  };
 
   const handleLogout = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -58,6 +99,13 @@ export const ProfileScreen = () => {
     setThemeMode(mode);
   };
 
+  const balanceBadgeColor =
+    balance?.status === 'POSITIVE'
+      ? theme.colors.emerald
+      : balance?.status === 'NEGATIVE'
+      ? theme.colors.rose
+      : theme.colors.cyan;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <MotiView
@@ -66,10 +114,10 @@ export const ProfileScreen = () => {
         transition={{ type: 'timing', duration: 400 }}
       >
         <Text style={styles.title}>Mi Perfil</Text>
-        <Text style={styles.subtitle}>Información personal y configuración de UBIX Control</Text>
+        <Text style={styles.subtitle}>Información personal y configuración de cuenta</Text>
       </MotiView>
 
-      {/* User Hero Card */}
+      {/* User Hero Card with Compact Corner Balance Chip */}
       <MotiView
         from={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -80,6 +128,21 @@ export const ProfileScreen = () => {
           colors={theme.colors.gradients.cyan}
           style={styles.heroGradient}
         >
+          {/* Corner Balance Trigger */}
+          <TouchableOpacity
+            style={styles.heroBalanceCornerBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setBalanceModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Scale color="#050A14" size={13} />
+            <Text style={styles.heroBalanceCornerText}>
+              {loadingBalance ? '...' : (balance?.netBalanceFormatted ?? '0h 00m')}
+            </Text>
+          </TouchableOpacity>
+
           <View style={styles.heroAvatar}>
             <User color="#050A14" size={32} />
           </View>
@@ -170,6 +233,24 @@ export const ProfileScreen = () => {
         style={styles.group}
       >
         <MenuRow
+          title="Ranking de Puntualidad"
+          subtitle="Tu posición y puntaje frente al equipo"
+          icon={<Trophy color={theme.colors.amber} size={20} />}
+          onPress={() => navigation.navigate('Ranking')}
+        />
+        <MenuRow
+          title="Mis Fotos de Marcado"
+          subtitle="Selfies de tus entradas y salidas por mes"
+          icon={<ImageIcon color={theme.colors.cyan} size={20} />}
+          onPress={() => navigation.navigate('MisFotos')}
+        />
+        <MenuRow
+          title="Notificaciones"
+          subtitle="Avisos de tu empresa pendientes de leer"
+          icon={<Bell color={theme.colors.violet} size={20} />}
+          onPress={() => navigation.navigate('Notificaciones')}
+        />
+        <MenuRow
           title="Libro de Reclamaciones"
           subtitle="Envía solicitudes de justificación o consultas a RRHH"
           icon={<FileText color={theme.colors.amber} size={20} />}
@@ -193,6 +274,139 @@ export const ProfileScreen = () => {
         <LogOut color={theme.colors.rose} size={20} />
         <Text style={styles.logoutBtnText}>CERRAR SESIÓN</Text>
       </TouchableOpacity>
+
+      {/* MODAL DETALLE DE BALANCE HORARIO */}
+      <Modal
+        visible={balanceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBalanceModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <Scale color={theme.colors.cyan} size={20} />
+                <Text style={styles.modalTitle}>
+                  BALANCE DE JORNADA ({balance?.monthName?.toUpperCase() ?? 'MES'})
+                </Text>
+              </View>
+              <View style={styles.modalHeaderRight}>
+                <TouchableOpacity
+                  onPress={handleManualRefresh}
+                  style={styles.modalRefreshBtn}
+                  activeOpacity={0.7}
+                >
+                  {loadingBalance ? (
+                    <ActivityIndicator size="small" color={theme.colors.cyan} />
+                  ) : (
+                    <RefreshCw color={theme.colors.cyan} size={15} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setBalanceModalVisible(false)}
+                  style={styles.modalCloseBtn}
+                  activeOpacity={0.7}
+                >
+                  <X color={theme.colors.textMuted} size={18} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Total Balance Hero in Modal */}
+            <View style={styles.modalBalanceBox}>
+              <Text style={[styles.modalBalanceNumber, { color: balanceBadgeColor }]}>
+                {balance?.netBalanceFormatted ?? '0h 00m'}
+              </Text>
+              <View
+                style={[
+                  styles.modalBadge,
+                  {
+                    backgroundColor:
+                      balance?.status === 'POSITIVE'
+                        ? 'rgba(16, 185, 129, 0.15)'
+                        : balance?.status === 'NEGATIVE'
+                        ? 'rgba(239, 68, 68, 0.15)'
+                        : 'rgba(0, 212, 255, 0.15)',
+                    borderColor: balanceBadgeColor,
+                  },
+                ]}
+              >
+                {balance?.status === 'POSITIVE' ? (
+                  <TrendingUp color={balanceBadgeColor} size={13} />
+                ) : balance?.status === 'NEGATIVE' ? (
+                  <TrendingDown color={balanceBadgeColor} size={13} />
+                ) : (
+                  <CheckCircle2 color={balanceBadgeColor} size={13} />
+                )}
+                <Text style={[styles.modalBadgeText, { color: balanceBadgeColor }]}>
+                  {balance?.status === 'POSITIVE'
+                    ? 'Saldo a Favor'
+                    : balance?.status === 'NEGATIVE'
+                    ? 'Tiempo por Recuperar'
+                    : 'Al Día'}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalSubtext}>
+              Balance neto = Horas extra aprobadas menos minutos de tardanza en turnos habituales.
+            </Text>
+
+            {/* Breakdown Row */}
+            <View style={styles.breakdownRow}>
+              <View style={styles.breakdownCol}>
+                <View style={styles.breakdownLabelRow}>
+                  <Zap color={theme.colors.orange} size={13} />
+                  <Text style={styles.breakdownLabel}>EXTRAS (+)</Text>
+                </View>
+                <Text style={[styles.breakdownValue, { color: theme.colors.orange }]}>
+                  {balance?.approvedExtraFormatted ?? '0h 00m'}
+                </Text>
+                <Text style={styles.breakdownNote}>
+                  {balance?.approvedShiftsCount ?? 0} {balance?.approvedShiftsCount === 1 ? 'turno' : 'turnos'}
+                </Text>
+              </View>
+
+              <View style={styles.breakdownDivider} />
+
+              <View style={styles.breakdownCol}>
+                <View style={styles.breakdownLabelRow}>
+                  <Clock color={theme.colors.rose} size={13} />
+                  <Text style={styles.breakdownLabel}>TARDANZAS (-)</Text>
+                </View>
+                <Text style={[styles.breakdownValue, { color: theme.colors.rose }]}>
+                  {balance?.tardinessFormatted ?? '0h 00m'}
+                </Text>
+                <Text style={styles.breakdownNote}>
+                  {balance?.tardinessCount ?? 0} {balance?.tardinessCount === 1 ? 'registro' : 'registros'}
+                </Text>
+              </View>
+
+              <View style={styles.breakdownDivider} />
+
+              <View style={styles.breakdownCol}>
+                <View style={styles.breakdownLabelRow}>
+                  <CheckCircle2 color={theme.colors.emerald} size={13} />
+                  <Text style={styles.breakdownLabel}>PUNTUAL</Text>
+                </View>
+                <Text style={[styles.breakdownValue, { color: theme.colors.emerald }]}>
+                  {balance?.onTimeCount ?? 0}
+                </Text>
+                <Text style={styles.breakdownNote}>a tiempo</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalDoneBtn}
+              onPress={() => setBalanceModalVisible(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalDoneBtnText}>ENTENDIDO</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -228,6 +442,29 @@ const createStyles = (theme: Theme, isDark: boolean) =>
     heroGradient: {
       padding: theme.spacing.xl,
       alignItems: 'center',
+      position: 'relative',
+    },
+    heroBalanceCornerBtn: {
+      position: 'absolute',
+      top: 14,
+      right: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 3,
+      elevation: 3,
+    },
+    heroBalanceCornerText: {
+      fontSize: 11,
+      fontWeight: '900',
+      color: '#050A14',
     },
     heroAvatar: {
       width: 64,
@@ -319,4 +556,147 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       fontWeight: '800',
       letterSpacing: 1,
     },
+
+    // Modal Styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: theme.spacing.lg,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 380,
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.glassBorder,
+      borderWidth: 1,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.xl,
+      ...theme.shadows.card,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    modalHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flex: 1,
+    },
+    modalHeaderRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    modalTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.cyan,
+      letterSpacing: 0.5,
+    },
+    modalRefreshBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(0, 212, 255, 0.1)' : 'rgba(2, 132, 199, 0.08)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalCloseBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalBalanceBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginVertical: theme.spacing.sm,
+    },
+    modalBalanceNumber: {
+      fontSize: 28,
+      fontWeight: '900',
+      letterSpacing: -0.5,
+    },
+    modalBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    modalBadgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    modalSubtext: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginBottom: theme.spacing.lg,
+      lineHeight: 16,
+    },
+    breakdownRow: {
+      flexDirection: 'row',
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)',
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.sm,
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    breakdownCol: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    breakdownLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 3,
+    },
+    breakdownLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      letterSpacing: 0.5,
+    },
+    breakdownValue: {
+      fontSize: 15,
+      fontWeight: '800',
+      marginBottom: 2,
+    },
+    breakdownNote: {
+      fontSize: 10,
+      color: theme.colors.textMuted,
+      fontWeight: '600',
+    },
+    breakdownDivider: {
+      width: 1,
+      height: 32,
+      backgroundColor: theme.colors.glassBorder,
+    },
+    modalDoneBtn: {
+      backgroundColor: theme.colors.cyan,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    modalDoneBtnText: {
+      color: '#050A14',
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
   });
+
+

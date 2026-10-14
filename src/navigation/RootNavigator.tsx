@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -10,6 +10,10 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ReclamacionesScreen } from '../screens/ReclamacionesScreen';
+import { SolicitudesScreen } from '../screens/SolicitudesScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { RankingScreen } from '../screens/RankingScreen';
+import { MyPhotosScreen } from '../screens/MyPhotosScreen';
 import { AdminHomeScreen } from '../screens/admin/AdminHomeScreen';
 import { AdminEmployeesScreen } from '../screens/admin/AdminEmployeesScreen';
 import { AdminReportsScreen } from '../screens/admin/AdminReportsScreen';
@@ -18,7 +22,12 @@ import { AdminSchedulesScreen } from '../screens/admin/AdminSchedulesScreen';
 import { AdminDevicesScreen } from '../screens/admin/AdminDevicesScreen';
 import { AdminAlertsScreen } from '../screens/admin/AdminAlertsScreen';
 import { AdminCompanyScreen } from '../screens/admin/AdminCompanyScreen';
+import { AdminSolicitudesScreen } from '../screens/admin/AdminSolicitudesScreen';
+import { AdminHolidaysScreen } from '../screens/admin/AdminHolidaysScreen';
 import { SuperAdminCompaniesScreen } from '../screens/admin/SuperAdminCompaniesScreen';
+import WolfWidget from '../components/WolfWidget';
+import DailyGreetingModal from '../components/DailyGreetingModal';
+import { secureStorage } from '../services/secureStorage';
 import {
   Clock,
   Calendar,
@@ -29,6 +38,7 @@ import {
   ShieldCheck,
   Building2,
   Crown,
+  ClipboardList,
 } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 
@@ -71,6 +81,14 @@ const EmployeeTabs = () => {
         options={{
           tabBarLabel: 'Mi Historial',
           tabBarIcon: ({ color, size }) => <Calendar color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Solicitudes"
+        component={SolicitudesScreen}
+        options={{
+          tabBarLabel: 'Solicitudes',
+          tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
         }}
       />
       <Tab.Screen
@@ -158,6 +176,34 @@ const AdminTabs = () => {
 export const RootNavigator = () => {
   const { token, user, isInitializing } = useAuth();
   const { theme, isDark } = useTheme();
+  const [celebrationTrigger, setCelebrationTrigger] = useState(false);
+  const [dailyGreetingVisible, setDailyGreetingVisible] = useState(false);
+
+  const triggerCelebration = useCallback(() => {
+    setCelebrationTrigger((prev) => !prev);
+  }, []);
+
+  // Verificar saludo diario al iniciar sesión
+  React.useEffect(() => {
+    const checkDailyGreeting = async () => {
+      if (!token) return;
+      try {
+        const lastDate = await secureStorage.getLastDailyGreetingDate();
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (lastDate !== todayStr) {
+          // Pequeño retardo para dar tiempo a cargar la pantalla suavemente
+          const timer = setTimeout(() => {
+            setDailyGreetingVisible(true);
+          }, 600);
+          return () => clearTimeout(timer);
+        }
+      } catch (err) {
+        console.log('Error checking daily greeting date:', err);
+      }
+    };
+
+    checkDailyGreeting();
+  }, [token]);
 
   if (isInitializing) {
     return (
@@ -201,27 +247,49 @@ export const RootNavigator = () => {
       };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!token ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        ) : isAdmin ? (
-          <>
-            <Stack.Screen name="AdminApp" component={AdminTabs} />
-            <Stack.Screen name="SuperAdminCompanies" component={SuperAdminCompaniesScreen} />
-            <Stack.Screen name="AdminSchedules" component={AdminSchedulesScreen} />
-            <Stack.Screen name="AdminDevices" component={AdminDevicesScreen} />
-            <Stack.Screen name="AdminAlerts" component={AdminAlertsScreen} />
-            <Stack.Screen name="AdminCompany" component={AdminCompanyScreen} />
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="EmployeeApp" component={EmployeeTabs} />
-            <Stack.Screen name="Reclamaciones" component={ReclamacionesScreen} />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <View style={{ flex: 1 }}>
+      <NavigationContainer theme={navTheme}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {!token ? (
+            <Stack.Screen name="Login" component={LoginScreen} />
+          ) : isAdmin ? (
+            <>
+              <Stack.Screen name="AdminApp" component={AdminTabs} />
+              <Stack.Screen name="SuperAdminCompanies" component={SuperAdminCompaniesScreen} />
+              <Stack.Screen name="AdminSchedules" component={AdminSchedulesScreen} />
+              <Stack.Screen name="AdminDevices" component={AdminDevicesScreen} />
+              <Stack.Screen name="AdminAlerts" component={AdminAlertsScreen} />
+              <Stack.Screen name="AdminCompany" component={AdminCompanyScreen} />
+              <Stack.Screen name="AdminSolicitudes" component={AdminSolicitudesScreen} />
+              <Stack.Screen name="AdminHolidays" component={AdminHolidaysScreen} />
+            </>
+          ) : (
+            <>
+              <Stack.Screen name="EmployeeApp" component={EmployeeTabs} />
+              <Stack.Screen name="Reclamaciones" component={ReclamacionesScreen} />
+              <Stack.Screen name="Notificaciones" component={NotificationsScreen} />
+              <Stack.Screen name="Ranking" component={RankingScreen} />
+              <Stack.Screen name="MisFotos" component={MyPhotosScreen} />
+            </>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+
+      {token && (
+        <>
+          <WolfWidget
+            isDark={isDark}
+            onPressCelebration={celebrationTrigger}
+            onOpenDailyGreeting={() => setDailyGreetingVisible(true)}
+          />
+          <DailyGreetingModal
+            visible={dailyGreetingVisible}
+            onClose={() => setDailyGreetingVisible(false)}
+            userName={user?.full_name || 'Compañero'}
+          />
+        </>
+      )}
+    </View>
   );
 };

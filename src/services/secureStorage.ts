@@ -17,6 +17,8 @@ export interface StoredSession {
   user: User;
 }
 
+const DAILY_GREETING_KEY = 'asistio_last_daily_greeting_date';
+
 export const secureStorage = {
   saveSession: async (session: StoredSession): Promise<void> => {
     await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
@@ -52,5 +54,13 @@ export const secureStorage = {
 
   clearBiometricCredentials: async (): Promise<void> => {
     await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIALS_KEY);
+  },
+
+  getLastDailyGreetingDate: async (): Promise<string | null> => {
+    return await SecureStore.getItemAsync(DAILY_GREETING_KEY);
+  },
+
+  saveLastDailyGreetingDate: async (dateStr: string): Promise<void> => {
+    await SecureStore.setItemAsync(DAILY_GREETING_KEY, dateStr);
   },
 };

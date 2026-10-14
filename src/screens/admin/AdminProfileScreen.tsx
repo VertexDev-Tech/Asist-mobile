@@ -26,6 +26,8 @@ import {
   Moon,
   Crown,
   Building2,
+  ClipboardList,
+  CalendarDays,
 } from 'lucide-react-native';
 
 export const AdminProfileScreen = () => {
@@ -147,6 +149,18 @@ export const AdminProfileScreen = () => {
           subtitle="Revisión de marcaciones fuera de zona"
           icon={<AlertTriangle color={theme.colors.rose} size={20} />}
           onPress={() => navigation.navigate('AdminAlerts')}
+        />
+        <MenuRow
+          title="Excepciones & Turnos"
+          subtitle="Aprobar permisos, vacaciones y turnos adicionales"
+          icon={<ClipboardList color={theme.colors.violet} size={20} />}
+          onPress={() => navigation.navigate('AdminSolicitudes')}
+        />
+        <MenuRow
+          title="Feriados"
+          subtitle="Días no laborables de la empresa"
+          icon={<CalendarDays color={theme.colors.orange} size={20} />}
+          onPress={() => navigation.navigate('AdminHolidays')}
         />
         <MenuRow
           title="Mi Empresa"
