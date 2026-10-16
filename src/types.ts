@@ -31,6 +31,19 @@ export interface AdminLoginRequest {
   password: string;
 }
 
+export interface RegisterCompanyRequest {
+  company_name: string;
+  ruc: string;
+  sector: string;
+  phone?: string;
+  admin_name: string;
+  email: string;
+  password: string;
+  latitude?: number;
+  longitude?: number;
+  geofence_radius?: number;
+}
+
 export interface LoginResponse {
   access_token: string;
   user: User;

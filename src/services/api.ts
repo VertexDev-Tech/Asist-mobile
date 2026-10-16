@@ -2,6 +2,7 @@ import axios from 'axios';
 import {
   EmployeeLoginRequest,
   AdminLoginRequest,
+  RegisterCompanyRequest,
   LoginResponse,
   MarkAttendanceRequest,
   DashboardKpis,
@@ -119,6 +120,28 @@ export const authApi = {
         company_name: u.company_name,
       },
     };
+  },
+
+  registerCompany: async (data: RegisterCompanyRequest): Promise<LoginResponse> => {
+    // 1. Enviar registro con prueba gratuita (TRIAL)
+    await api.post('/auth/register', {
+      company_name: data.company_name.trim(),
+      ruc: data.ruc.trim(),
+      sector: data.sector.trim(),
+      phone: data.phone?.trim() || undefined,
+      admin_name: data.admin_name.trim(),
+      email: data.email.trim().toLowerCase(),
+      password: data.password.trim(),
+      latitude: data.latitude ?? -12.046374,
+      longitude: data.longitude ?? -77.042793,
+      geofence_radius: data.geofence_radius ?? 100,
+    });
+
+    // 2. Autenticar inmediatamente para ingresar sin fricciones
+    return authApi.loginAdmin({
+      email: data.email.trim().toLowerCase(),
+      password: data.password.trim(),
+    });
   },
 };
 

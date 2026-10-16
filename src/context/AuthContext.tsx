@@ -8,7 +8,7 @@ import {
   secureStorage,
   SavedBiometricCreds,
 } from '../services/secureStorage';
-import { User, EmployeeLoginRequest, AdminLoginRequest } from '../types';
+import { User, EmployeeLoginRequest, AdminLoginRequest, RegisterCompanyRequest } from '../types';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 interface AuthContextType {
@@ -18,6 +18,7 @@ interface AuthContextType {
   isInitializing: boolean;
   loginEmployee: (credentials: EmployeeLoginRequest) => Promise<void>;
   loginAdmin: (credentials: AdminLoginRequest) => Promise<void>;
+  registerCompany: (data: RegisterCompanyRequest) => Promise<void>;
   logout: () => Promise<void>;
   authenticateWithBiometrics: () => Promise<boolean>;
   enableBiometrics: (creds: SavedBiometricCreds) => Promise<void>;
@@ -99,6 +100,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const registerCompany = async (data: RegisterCompanyRequest) => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.registerCompany(data);
+      if (res.access_token && res.user) {
+        setToken(res.access_token);
+        setUser(res.user);
+        setAuthToken(res.access_token);
+        await secureStorage.saveSession({ token: res.access_token, user: res.user });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     setToken(null);
     setUser(null);
@@ -156,6 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isInitializing,
         loginEmployee,
         loginAdmin,
+        registerCompany,
         logout,
         authenticateWithBiometrics,
         enableBiometrics,

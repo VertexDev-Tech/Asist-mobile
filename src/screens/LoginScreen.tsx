@@ -27,10 +27,13 @@ import {
   Sun,
   Moon,
   ArrowRight,
+  Sparkles,
 } from 'lucide-react-native';
+import { RegisterTrialModal } from '../components/RegisterTrialModal';
 
 export const LoginScreen = () => {
   const [activeTab, setActiveTab] = useState<'employee' | 'admin'>('employee');
+  const [registerModalVisible, setRegisterModalVisible] = useState(false);
   const { theme, isDark, toggleTheme } = useTheme();
 
   // Employee Form State
@@ -341,6 +344,51 @@ export const LoginScreen = () => {
             </TouchableOpacity>
           )}
         </MotiView>
+
+        {/* Botón de Registro Gratuito / Comenzar Trial Gratis (Estilo Web) */}
+        <MotiView
+          from={{ opacity: 0, translateY: 15 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 500, delay: 150 }}
+          style={styles.trialCard}
+        >
+          <View style={styles.trialHeaderRow}>
+            <View style={styles.trialDivider} />
+            <Text style={styles.trialDividerLabel}>¿AÚN NO TIENES CUENTA?</Text>
+            <View style={styles.trialDivider} />
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setRegisterModalVisible(true);
+            }}
+            style={styles.trialBtnWrapper}
+          >
+            <LinearGradient
+              colors={theme.colors.gradients.cyan}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.trialBtn}
+            >
+              <View style={styles.trialBtnContent}>
+                <Sparkles color="#FFFFFF" size={18} style={{ marginRight: 8 }} />
+                <Text style={styles.trialBtnText}>Comenzar Trial Gratis</Text>
+                <ArrowRight color="#FFFFFF" size={18} style={{ marginLeft: 8 }} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <Text style={styles.trialSubtext}>
+            Prueba gratuita de 30 días · Sin contratos ni tarjeta
+          </Text>
+        </MotiView>
+
+        <RegisterTrialModal
+          visible={registerModalVisible}
+          onClose={() => setRegisterModalVisible(false)}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -518,5 +566,56 @@ const createStyles = (theme: Theme, isDark: boolean) =>
       color: theme.colors.cyan,
       fontSize: 14,
       fontWeight: '700',
+    },
+    trialCard: {
+      marginTop: theme.spacing.lg,
+      alignItems: 'center',
+    },
+    trialHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+      width: '100%',
+    },
+    trialDivider: {
+      flex: 1,
+      height: 1,
+      backgroundColor: theme.colors.glassBorder,
+    },
+    trialDividerLabel: {
+      paddingHorizontal: 12,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1,
+      color: theme.colors.textMuted,
+    },
+    trialBtnWrapper: {
+      width: '100%',
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      ...theme.shadows.glowPrimary,
+    },
+    trialBtn: {
+      height: 52,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+    },
+    trialBtnContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    trialBtnText: {
+      color: '#FFF',
+      fontSize: 15,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
+    trialSubtext: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginTop: 8,
+      textAlign: 'center',
     },
   });
