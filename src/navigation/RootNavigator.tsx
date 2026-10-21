@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -47,16 +48,18 @@ const Tab = createBottomTabNavigator();
 
 const EmployeeTabs = () => {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.glassBorder,
-          height: 64,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : 8,
           paddingTop: 8,
         },
         tabBarActiveTintColor: theme.colors.cyan,
@@ -106,17 +109,19 @@ const EmployeeTabs = () => {
 const AdminTabs = () => {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.glassBorder,
-          height: 64,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 4 : 8,
           paddingTop: 8,
         },
         tabBarActiveTintColor: theme.colors.cyan,
